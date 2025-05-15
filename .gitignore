@@ -1,0 +1,25 @@
+# Compiled binaries
+ast
+
+# Generated files from flex/bison
+lex.yy.c
+y.tab.c
+y.tab.h
+
+# Object files
+*.o
+semantic_analysis.o
+
+# Other compiled files
+*.out
+*.exe
+
+# IDE/Editor files
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
