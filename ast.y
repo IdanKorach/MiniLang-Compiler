@@ -57,6 +57,9 @@ s: program {
         printf("=== Semantic analysis failed with %d error(s) ===\n", semantic_errors);
         return 1;  // Exit with error code
       }
+    } else if (main_function_found > 1) {
+      printf("Error: Multiple '__main__' functions found.\n");
+      return 1;
     } else {
       printf("Error: No '__main__' function found.\n");
       return 1;
