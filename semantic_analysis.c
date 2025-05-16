@@ -21,13 +21,43 @@ typedef struct scope {
     char* scope_name;  // For debugging
 } scope;
 
-// Global list to track all declared functions
-typedef struct function_list {
+typedef struct function_info {
     char* name;
-    struct function_list* next;
-} function_list;
+    int param_count;
+    int* param_types;        // Array of parameter types
+    char** param_names;      // Array of parameter names
+    int* has_default;        // Array indicating which params have defaults
+    int return_type;         // 0 for no return type, TYPE_INT/STRING/etc for others
+    struct function_info* next;
+} function_info;
 
-function_list* declared_functions = NULL;
+// Update the global variable declaration
+function_info* declared_functions = NULL;
+
+// Helper function to create a new function_info
+function_info* create_function_info(char* name, int return_type) {
+    function_info* new_func = (function_info*)malloc(sizeof(function_info));
+    new_func->name = strdup(name);
+    new_func->param_count = 0;
+    new_func->param_types = NULL;
+    new_func->param_names = NULL;
+    new_func->has_default = NULL;
+    new_func->return_type = return_type;
+    new_func->next = declared_functions;
+    return new_func;
+}
+
+// Updated function to find a function by name
+function_info* find_function_by_name(char* func_name) {
+    function_info* current = declared_functions;
+    while (current) {
+        if (strcmp(current->name, func_name) == 0) {
+            return current;
+        }
+        current = current->next;
+    }
+    return NULL;
+}
 
 // Global variable to track semantic errors
 int semantic_errors = 0;
@@ -44,7 +74,7 @@ int get_type(char* type_str) {
     if (strcmp(type_str, "string") == 0) return TYPE_STRING;
     if (strcmp(type_str, "bool") == 0) return TYPE_BOOL;
     if (strcmp(type_str, "float") == 0) return TYPE_FLOAT;
-    return 0; // unknown type
+    return 0; // none
 }
 
 // Helper function to get type name from type integer
@@ -54,7 +84,7 @@ char* get_type_name(int type) {
         case TYPE_STRING: return "string";
         case TYPE_BOOL: return "bool";
         case TYPE_FLOAT: return "float";
-        default: return "unknown";
+        default: return "none";
     }
 }
 
@@ -80,26 +110,50 @@ void add_variable(scope* curr_scope, char* name, int type) {
            curr_scope->scope_name ? curr_scope->scope_name : "global");
 }
 
-// Function to add a function to the global list and check for duplicates
-void add_function_declaration(char* func_name) {
+// Updated function to add a function declaration with return type
+function_info* add_function_declaration(char* func_name, int return_type) {
     // Check if function already exists
-    function_list* current = declared_functions;
+    function_info* current = declared_functions;
     while (current) {
         if (strcmp(current->name, func_name) == 0) {
             printf("  Semantic Error: Function '%s' already declared\n", func_name);
             semantic_errors++;
-            return;
+            return NULL;
         }
         current = current->next;
     }
     
-    // Add new function to the list
-    function_list* new_func = (function_list*)malloc(sizeof(function_list));
-    new_func->name = strdup(func_name);
-    new_func->next = declared_functions;
+    // Create new function info
+    function_info* new_func = create_function_info(func_name, return_type);
     declared_functions = new_func;
     
-    printf("  Function '%s' declared successfully\n", func_name);
+    printf("  Function '%s' declared successfully", func_name);
+    if (return_type != 0) {
+        printf(" (return type: %s)", get_type_name(return_type));
+    }
+    printf("\n");
+    
+    return new_func;
+}
+
+// Helper function to add a parameter to a function_info
+void add_parameter_to_function(function_info* func, char* param_name, int param_type, int has_default_value) {
+    func->param_count++;
+    
+    // Reallocate arrays to accommodate new parameter
+    func->param_types = (int*)realloc(func->param_types, func->param_count * sizeof(int));
+    func->param_names = (char**)realloc(func->param_names, func->param_count * sizeof(char*));
+    func->has_default = (int*)realloc(func->has_default, func->param_count * sizeof(int));
+    
+    // Add the new parameter (at the end)
+    int index = func->param_count - 1;
+    func->param_types[index] = param_type;
+    func->param_names[index] = strdup(param_name);
+    func->has_default[index] = has_default_value;
+    
+    printf("  Added parameter '%s' (type: %s, has_default: %s) to function '%s'\n",
+           param_name, get_type_name(param_type), 
+           has_default_value ? "yes" : "no", func->name);
 }
 
 // Fully inlined version without separate helper function
@@ -571,16 +625,9 @@ int is_variable_usage(node* var_node, node* parent_node) {
     return 1;
 }
 
-// Function to check if a function has been declared
+// Updated is_function_declared to use new structure
 int is_function_declared(char* func_name) {
-    function_list* current = declared_functions;
-    while (current) {
-        if (strcmp(current->name, func_name) == 0) {
-            return 1; // Function found
-        }
-        current = current->next;
-    }
-    return 0; // Function not found
+    return find_function_by_name(func_name) != NULL;
 }
 
 // Fixed handle_initialization - no recursive analyze_node call
@@ -676,6 +723,84 @@ void handle_function_call(node* call_node, scope* curr_scope) {
     // TODO: In the future, we could add parameter validation here
 }
 
+// Helper function to extract return type from function AST
+int extract_return_type(node* func_node) {
+    if (!func_node || !func_node->right) return 0;
+    
+    // Navigate the AST structure to find return_type node
+    node* current = func_node->right;
+    
+    // The structure varies, so we need to search for "return_type" token
+    // Use a simple BFS approach
+    node* nodes_to_check[50] = {current};
+    int front = 0, rear = 1;
+    
+    while (front < rear && rear < 50) {
+        node* check_node = nodes_to_check[front++];
+        if (!check_node) continue;
+        
+        if (check_node->token && strcmp(check_node->token, "return_type") == 0) {
+            // Found return_type node, extract the actual type
+            if (check_node->left && check_node->left->token) {
+                return get_type(check_node->left->token);
+            }
+        }
+        
+        // Add children to queue
+        if (check_node->left && rear < 50) {
+            nodes_to_check[rear++] = check_node->left;
+        }
+        if (check_node->right && rear < 50) {
+            nodes_to_check[rear++] = check_node->right;
+        }
+    }
+    
+    return 0; // No return type found
+}
+
+// Enhanced process_params to collect parameter information for function_info
+void process_params_for_function(node* node, function_info* func_info, scope* func_scope) {
+    if (!node || !func_info) return;
+    
+    // Check if this is a parameter (type followed by identifier)
+    if (node->token && get_type(node->token) != 0) {
+        // This is a parameter type node
+        char* param_name = NULL;
+        int has_default_value = 0;
+        
+        // Extract parameter name - same logic as before
+        if (node->left) {
+            if (node->left->token && strlen(node->left->token) > 0) {
+                if (get_type(node->left->token) == 0) {
+                    param_name = node->left->token;
+                    // Check if there's a default value (right side of the param name node)
+                    if (node->left->left) {
+                        has_default_value = 1;
+                    }
+                }
+            } else if (!node->left->token || strlen(node->left->token) == 0) {
+                if (node->left->left && node->left->left->token) {
+                    param_name = node->left->left->token;
+                    if (node->left->right) {
+                        has_default_value = 1;
+                    }
+                }
+            }
+        }
+        
+        if (param_name) {
+            int param_type = get_type(node->token);
+            
+            // Add to function info
+            add_parameter_to_function(func_info, param_name, param_type, has_default_value);
+        }
+    }
+    
+    // Recursively process children
+    process_params_for_function(node->left, func_info, func_scope);
+    process_params_for_function(node->right, func_info, func_scope);
+}
+
 // Check if a node represents a variable usage (not declaration/assignment)
 void analyze_node(node* root, node* parent, scope* curr_scope) {
     if (!root) return;
@@ -683,7 +808,7 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
     printf("DEBUG: analyze_node called with token='%s'\n", 
            root->token ? root->token : "NULL");
     
-    // Check if this is a function definition
+    // Updated function handling in analyze_node
     if (root->token && strcmp(root->token, "function") == 0) {
         scope* func_scope = mkscope(curr_scope);
         
@@ -691,11 +816,40 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
             func_scope->scope_name = strdup(root->left->token);
             printf("Entering function scope: %s\n", func_scope->scope_name);
             
-            // Track function declaration for duplicate checking
-            add_function_declaration(root->left->token);
+            // Extract return type from AST
+            int return_type = extract_return_type(root);
             
-            // Validate __main__ function requirements
-            validate_main_function(root, func_scope);
+            // Create and track function declaration with return type
+            function_info* func_info = add_function_declaration(root->left->token, return_type);
+            
+            if (func_info) {
+                // Validate __main__ function requirements
+                validate_main_function(root, func_scope);
+                
+                // Find and process parameters with enhanced function info tracking
+                node* current = root->right;
+                node* nodes_to_check[50] = {current};
+                int front = 0, rear = 1;
+                
+                while (front < rear && rear < 50) {
+                    node* check_node = nodes_to_check[front++];
+                    if (!check_node) continue;
+                    
+                    if (check_node->token && strcmp(check_node->token, "params") == 0) {
+                        printf("Processing parameters...\n");
+                        process_params_for_function(check_node, func_info, func_scope);
+                        break; // We found and processed params, no need to continue
+                    }
+                    
+                    // Add children to queue
+                    if (check_node->left && rear < 50) {
+                        nodes_to_check[rear++] = check_node->left;
+                    }
+                    if (check_node->right && rear < 50) {
+                        nodes_to_check[rear++] = check_node->right;
+                    }
+                }
+            }
         }
         
         analyze_node(root->left, root, func_scope);
@@ -756,6 +910,33 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
     analyze_node(root->right, root, curr_scope);
 }
 
+// Temporary debug function to print all collected function info
+void debug_print_functions() {
+    printf("\n=== DEBUG: All collected functions ===\n");
+    function_info* current = declared_functions;
+    int count = 0;
+    
+    while (current) {
+        count++;
+        printf("Function %d: %s\n", count, current->name);
+        printf("  Return type: %s\n", get_type_name(current->return_type));
+        printf("  Parameter count: %d\n", current->param_count);
+        
+        for (int i = 0; i < current->param_count; i++) {
+            printf("    Param %d: %s %s", i+1, 
+                   get_type_name(current->param_types[i]),
+                   current->param_names[i]);
+            if (current->has_default[i]) {
+                printf(" (has default)");
+            }
+            printf("\n");
+        }
+        printf("\n");
+        current = current->next;
+    }
+    printf("=== End debug ===\n\n");
+}
+
 // Main semantic analysis function - no more duplicate messages!
 void semantic_analysis(struct node* root, scope* curr_scope) {
     // Cast the struct node* to our node* type
@@ -766,4 +947,6 @@ void semantic_analysis(struct node* root, scope* curr_scope) {
     
     // Analyze the entire AST
     analyze_node(ast_root, NULL, curr_scope);
+
+    debug_print_functions();
 }
