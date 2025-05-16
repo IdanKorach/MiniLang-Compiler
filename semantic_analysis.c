@@ -758,47 +758,69 @@ int extract_return_type(node* func_node) {
     return 0; // No return type found
 }
 
-// Enhanced process_params to collect parameter information for function_info
-void process_params_for_function(node* node, function_info* func_info, scope* func_scope) {
-    if (!node || !func_info) return;
+// Enhanced process_params_for_function with default value type checking
+void process_params_for_function(node* param_node, function_info* func_info, scope* func_scope) {
+    if (!param_node || !func_info) return;
     
     // Check if this is a parameter (type followed by identifier)
-    if (node->token && get_type(node->token) != 0) {
+    if (param_node->token && get_type(param_node->token) != 0) {
         // This is a parameter type node
         char* param_name = NULL;
         int has_default_value = 0;
+        node* default_value_node = NULL;
         
-        // Extract parameter name - same logic as before
-        if (node->left) {
-            if (node->left->token && strlen(node->left->token) > 0) {
-                if (get_type(node->left->token) == 0) {
-                    param_name = node->left->token;
+        // Extract parameter name and default value
+        if (param_node->left) {
+            if (param_node->left->token && strlen(param_node->left->token) > 0) {
+                if (get_type(param_node->left->token) == 0) {
+                    param_name = param_node->left->token;
                     // Check if there's a default value (right side of the param name node)
-                    if (node->left->left) {
+                    if (param_node->left->left) {
                         has_default_value = 1;
+                        default_value_node = param_node->left->left;
                     }
                 }
-            } else if (!node->left->token || strlen(node->left->token) == 0) {
-                if (node->left->left && node->left->left->token) {
-                    param_name = node->left->left->token;
-                    if (node->left->right) {
+            } else if (!param_node->left->token || strlen(param_node->left->token) == 0) {
+                if (param_node->left->left && param_node->left->left->token) {
+                    param_name = param_node->left->left->token;
+                    if (param_node->left->right) {
                         has_default_value = 1;
+                        default_value_node = param_node->left->right;
                     }
                 }
             }
         }
         
         if (param_name) {
-            int param_type = get_type(node->token);
+            int param_type = get_type(param_node->token);
             
             // Add to function info
             add_parameter_to_function(func_info, param_name, param_type, has_default_value);
+            
+            // NEW: Check default value type if it exists
+            if (has_default_value && default_value_node) {
+                printf("  Checking default value for parameter '%s'...\n", param_name);
+                
+                // Get the type of the default value
+                int default_type = get_expression_type(default_value_node, func_scope);
+                
+                if (default_type == 0) {
+                    printf("    Warning: Cannot determine type of default value for '%s'\n", param_name);
+                } else if (default_type != param_type) {
+                    printf("  Semantic Error: Default value type mismatch for parameter '%s'\n", param_name);
+                    printf("    Parameter type: %s, Default value type: %s\n", 
+                           get_type_name(param_type), get_type_name(default_type));
+                    semantic_errors++;
+                } else {
+                    printf("    Default value type OK: %s\n", get_type_name(default_type));
+                }
+            }
         }
     }
     
     // Recursively process children
-    process_params_for_function(node->left, func_info, func_scope);
-    process_params_for_function(node->right, func_info, func_scope);
+    process_params_for_function(param_node->left, func_info, func_scope);
+    process_params_for_function(param_node->right, func_info, func_scope);
 }
 
 // Check if a node represents a variable usage (not declaration/assignment)
