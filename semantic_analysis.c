@@ -156,6 +156,37 @@ void add_parameter_to_function(function_info* func, char* param_name, int param_
            has_default_value ? "yes" : "no", func->name);
 }
 
+// Count the number of arguments in a function call
+int count_function_arguments(node* args_node) {
+    if (!args_node) return 0;
+    
+    int count = 0;
+    node* current = args_node;
+    
+    // The arguments in the AST are structured as a tree
+    // We need to count all non-empty tokens that represent actual arguments
+    while (current) {
+        // If this node has a token that's not empty, it's an argument
+        if (current->token && strlen(current->token) > 0) {
+            count++;
+            // For single argument, we're done
+            if (!current->left && !current->right) {
+                break;
+            }
+        }
+        
+        // Check left child for arguments
+        if (current->left) {
+            count += count_function_arguments(current->left);
+        }
+        
+        // Move to right child (next argument in chain)
+        current = current->right;
+    }
+    
+    return count;
+}
+
 // Fully inlined version without separate helper function
 void validate_main_function(node* func_node, scope* func_scope) {
     if (!func_node || !func_node->left || !func_node->left->token) {
@@ -699,7 +730,7 @@ void handle_initialization(node* init_node, scope* curr_scope) {
     printf("=== DEBUG: Exiting handle_initialization ===\n");
 }
 
-// Handle function call validation
+// Handle_function_call with argument count validation
 void handle_function_call(node* call_node, scope* curr_scope) {
     if (!call_node || !call_node->left || !call_node->left->token) {
         printf("  Semantic Error: Invalid function call node\n");
@@ -712,15 +743,48 @@ void handle_function_call(node* call_node, scope* curr_scope) {
     printf("Found function call: %s\n", func_name);
     
     // Check if function has been declared
-    if (!is_function_declared(func_name)) {
+    function_info* func_info = find_function_by_name(func_name);
+    if (!func_info) {
         printf("  Semantic Error: Function '%s' called before declaration\n", func_name);
         semantic_errors++;
         return;
     }
     
-    printf("  Function call '%s' validated successfully\n", func_name);
+    // Count the arguments passed to the function
+    int args_passed = 0;
+    if (call_node->right) {
+        args_passed = count_function_arguments(call_node->right);
+    }
     
-    // TODO: In the future, we could add parameter validation here
+    // Calculate minimum required arguments (parameters without defaults)
+    int min_required_args = 0;
+    int total_params = func_info->param_count;
+    
+    for (int i = 0; i < total_params; i++) {
+        if (!func_info->has_default[i]) {
+            min_required_args++;
+        }
+    }
+    
+    // Validate argument count
+    printf("  Validating argument count: passed=%d, required=%d-%d\n", 
+           args_passed, min_required_args, total_params);
+    
+    if (args_passed < min_required_args) {
+        printf("  Semantic Error: Too few arguments for function '%s'\n", func_name);
+        printf("    Expected at least %d arguments, got %d\n", min_required_args, args_passed);
+        semantic_errors++;
+        return;
+    }
+    
+    if (args_passed > total_params) {
+        printf("  Semantic Error: Too many arguments for function '%s'\n", func_name);
+        printf("    Expected at most %d arguments, got %d\n", total_params, args_passed);
+        semantic_errors++;
+        return;
+    }
+    
+    printf("  Function call '%s' argument count validated successfully\n", func_name);
 }
 
 // Helper function to extract return type from function AST
