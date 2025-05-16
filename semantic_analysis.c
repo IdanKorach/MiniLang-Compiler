@@ -385,12 +385,47 @@ int looks_like_string_literal(char* token) {
 }
 
 // Get the type of an expression node
+// Updated get_expression_type function with better operator handling
 int get_expression_type(node* expr_node, scope* curr_scope) {
     if (!expr_node || !expr_node->token) {
         return 0; // Unknown type
     }
     
     printf("DEBUG get_expression_type: analyzing token='%s'\n", expr_node->token);
+    
+    // Handle comparison operations - these result in boolean
+    if (strcmp(expr_node->token, "==") == 0 || strcmp(expr_node->token, "!=") == 0 ||
+        strcmp(expr_node->token, "<") == 0 || strcmp(expr_node->token, ">") == 0 ||
+        strcmp(expr_node->token, "<=") == 0 || strcmp(expr_node->token, ">=") == 0) {
+        printf("DEBUG: Detected comparison operator\n");
+        return TYPE_BOOL;
+    }
+    
+    // Handle logical operations - these result in boolean
+    if (strcmp(expr_node->token, "and") == 0 || strcmp(expr_node->token, "or") == 0 ||
+        strcmp(expr_node->token, "not") == 0) {
+        printf("DEBUG: Detected logical operator\n");
+        return TYPE_BOOL;
+    }
+    
+    // Handle arithmetic operations
+    if (strcmp(expr_node->token, "+") == 0 || strcmp(expr_node->token, "-") == 0 ||
+        strcmp(expr_node->token, "*") == 0 || strcmp(expr_node->token, "/") == 0) {
+        printf("DEBUG: Detected arithmetic operator\n");
+        // Get types of operands
+        int left_type = get_expression_type(expr_node->left, curr_scope);
+        int right_type = get_expression_type(expr_node->right, curr_scope);
+        
+        // If either operand is float, result is float
+        if (left_type == TYPE_FLOAT || right_type == TYPE_FLOAT) {
+            return TYPE_FLOAT;
+        }
+        // If both are int, result is int
+        if (left_type == TYPE_INT && right_type == TYPE_INT) {
+            return TYPE_INT;
+        }
+        return TYPE_INT; // Default for arithmetic
+    }
     
     // Check if it's a variable - look up its declared type
     var* found_var = find_variable_in_scope_hierarchy(curr_scope, expr_node->token);
@@ -417,49 +452,10 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
         return TYPE_BOOL;
     }
     
-    // Check if it looks like a string literal using our helper function
+    // Check if it looks like a string literal
     if (looks_like_string_literal(expr_node->token)) {
         printf("DEBUG: Detected string literal by pattern\n");
         return TYPE_STRING;
-    }
-    
-    // If it's not a declared variable and not any of the above literals,
-    // it's an ERROR - don't assume it's a string!
-    if (!found_var) {
-        // If we reach here, it's likely an undeclared variable
-        // Don't assume type - let the variable usage check handle the error
-        printf("DEBUG: Undeclared identifier - returning unknown type\n");
-        return 0; // Return 0 to indicate we can't determine the type
-    }
-    
-    // Handle arithmetic operations (rest of the function stays the same)
-    if (strcmp(expr_node->token, "+") == 0 || strcmp(expr_node->token, "-") == 0 ||
-        strcmp(expr_node->token, "*") == 0 || strcmp(expr_node->token, "/") == 0) {
-        // Get types of operands
-        int left_type = get_expression_type(expr_node->left, curr_scope);
-        int right_type = get_expression_type(expr_node->right, curr_scope);
-        
-        // If either operand is float, result is float
-        if (left_type == TYPE_FLOAT || right_type == TYPE_FLOAT) {
-            return TYPE_FLOAT;
-        }
-        // If both are int, result is int
-        if (left_type == TYPE_INT && right_type == TYPE_INT) {
-            return TYPE_INT;
-        }
-    }
-    
-    // Comparison operations result in boolean
-    if (strcmp(expr_node->token, "==") == 0 || strcmp(expr_node->token, "!=") == 0 ||
-        strcmp(expr_node->token, "<") == 0 || strcmp(expr_node->token, ">") == 0 ||
-        strcmp(expr_node->token, "<=") == 0 || strcmp(expr_node->token, ">=") == 0) {
-        return TYPE_BOOL;
-    }
-    
-    // Logical operations result in boolean
-    if (strcmp(expr_node->token, "and") == 0 || strcmp(expr_node->token, "or") == 0 ||
-        strcmp(expr_node->token, "not") == 0) {
-        return TYPE_BOOL;
     }
     
     // Function calls - for now return unknown type
@@ -468,8 +464,37 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
         return 0; // Unknown
     }
     
-    printf("DEBUG: Unknown expression type\n");
-    return 0; // Unknown type
+    // If we reach here, it's likely an undeclared variable or unknown operator
+    printf("DEBUG: Undeclared identifier - returning unknown type\n");
+    return 0; // Return 0 to indicate we can't determine the type
+}
+
+// Helper function to validate that an expression is of boolean type
+void validate_condition_type(node* condition_node, scope* curr_scope, const char* context) {
+    if (!condition_node) {
+        printf("  Semantic Error: Missing condition in %s\n", context);
+        semantic_errors++;
+        return;
+    }
+    
+    // Get the type of the condition expression
+    int condition_type = get_expression_type(condition_node, curr_scope);
+    
+    printf("  Validating %s condition type: got %s\n", context, get_type_name(condition_type));
+    
+    if (condition_type == 0) {
+        printf("  Warning: Cannot determine type of condition in %s\n", context);
+        return;
+    }
+    
+    if (condition_type != TYPE_BOOL) {
+        printf("  Semantic Error: %s condition must be boolean type\n", context);
+        printf("    Expected: bool, Got: %s\n", get_type_name(condition_type));
+        semantic_errors++;
+        return;
+    }
+    
+    printf("  %s condition type validated successfully (bool)\n", context);
 }
 
 // Handle return statement validation
@@ -652,6 +677,40 @@ void handle_declaration(node* declare_node, scope* curr_scope) {
     add_variable(curr_scope, var_name, type);
 }
 
+// Handle if-statement validation
+void handle_if_statement(node* if_node, scope* curr_scope) {
+    if (!if_node) return;
+    
+    printf("Found if statement\n");
+    
+    // The structure of if-node varies, but typically:
+    // if_node->left is the condition
+    // if_node->right is the body (or next part of if-elif-else chain)
+    
+    // Find the condition node
+    node* condition = if_node->left;
+    
+    // Validate the condition type
+    validate_condition_type(condition, curr_scope, "if-statement");
+}
+
+// Handle while-statement validation
+void handle_while_statement(node* while_node, scope* curr_scope) {
+    if (!while_node) return;
+    
+    printf("Found while statement\n");
+    
+    // The structure of while-node:
+    // while_node->left is the condition
+    // while_node->right is the body
+    
+    // Find the condition node
+    node* condition = while_node->left;
+    
+    // Validate the condition type
+    validate_condition_type(condition, curr_scope, "while-loop");
+}
+
 // Helper function to process parameters under a params node
 void process_params(node* node, scope* func_scope) {
     if (!node) return;
@@ -682,7 +741,7 @@ void debug_print_node(node* n, char* context) {
     }
 }
 
-// Debug version of is_variable_usage
+// Updated is_variable_usage function to handle operators correctly
 int is_variable_usage(node* var_node, node* parent_node) {
     printf("DEBUG: Checking is_variable_usage for token='%s', parent='%s'\n",
            var_node ? (var_node->token ? var_node->token : "NULL") : "NULL",
@@ -723,6 +782,26 @@ int is_variable_usage(node* var_node, node* parent_node) {
         strcmp(var_node->token, "while") == 0 ||
         strcmp(var_node->token, "return") == 0) {
         printf("DEBUG: Rejected - is a keyword/operator\n");
+        return 0;
+    }
+    
+    // NEW: Skip arithmetic and comparison operators
+    if (strcmp(var_node->token, "+") == 0 ||
+        strcmp(var_node->token, "-") == 0 ||
+        strcmp(var_node->token, "*") == 0 ||
+        strcmp(var_node->token, "/") == 0 ||
+        strcmp(var_node->token, "%") == 0 ||
+        strcmp(var_node->token, "**") == 0 ||
+        strcmp(var_node->token, "==") == 0 ||
+        strcmp(var_node->token, "!=") == 0 ||
+        strcmp(var_node->token, "<") == 0 ||
+        strcmp(var_node->token, ">") == 0 ||
+        strcmp(var_node->token, "<=") == 0 ||
+        strcmp(var_node->token, ">=") == 0 ||
+        strcmp(var_node->token, "and") == 0 ||
+        strcmp(var_node->token, "or") == 0 ||
+        strcmp(var_node->token, "not") == 0) {
+        printf("DEBUG: Rejected - is an operator\n");
         return 0;
     }
     
@@ -1102,13 +1181,37 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
         return;
     }
     
-    // NEW: Check if this is a return statement
+    // Check if this is an if statement
+    if (root->token && strcmp(root->token, "if") == 0) {
+        handle_if_statement(root, curr_scope);
+        // Continue with normal traversal to check the condition and body
+    }
+
+    // Check if this is a while statement
+    if (root->token && strcmp(root->token, "while") == 0) {
+        handle_while_statement(root, curr_scope);
+        // Continue with normal traversal to check the condition and body
+    }
+
+    // Also handle if-else, if-elif, if-elif-else variants
+    if (root->token && (strcmp(root->token, "if-else") == 0 || 
+                        strcmp(root->token, "if-elif") == 0 || 
+                        strcmp(root->token, "if-elif-else") == 0)) {
+        // For these complex if statements, we need to find the condition
+        // The structure might be nested, but the condition is usually in the first if node
+        node* if_part = root->left;  // This should be the if node
+        if (if_part && strcmp(if_part->token, "if") == 0) {
+            handle_if_statement(if_part, curr_scope);
+        }
+        // Continue with normal traversal
+    }       
+
+    // Check if this is a return statement
     if (root->token && strcmp(root->token, "return") == 0) {
         handle_return_statement(root, curr_scope);
         // Continue with normal traversal to validate the return expression
     }
-    
-    // Rest of the function remains the same...
+   
     // Check if this is a params node
     if (root->token && strcmp(root->token, "params") == 0) {
         printf("Processing parameters...\n");
