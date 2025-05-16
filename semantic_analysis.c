@@ -33,6 +33,8 @@ typedef struct function_info {
 
 // Update the global variable declaration
 function_info* declared_functions = NULL;
+// Global variable to track current function context for return type validation
+function_info* current_function = NULL;
 
 // Helper function to create a new function_info
 function_info* create_function_info(char* name, int return_type) {
@@ -468,6 +470,67 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
     
     printf("DEBUG: Unknown expression type\n");
     return 0; // Unknown type
+}
+
+// Handle return statement validation
+void handle_return_statement(node* return_node, scope* curr_scope) {
+    if (!current_function) {
+        printf("  Semantic Error: Return statement outside of function\n");
+        semantic_errors++;
+        return;
+    }
+    
+    printf("Found return statement in function '%s'\n", current_function->name);
+    
+    // Check if function has a declared return type
+    int expected_return_type = current_function->return_type;
+    
+    // If no return value is provided (return;)
+    if (!return_node || !return_node->left) {
+        printf("  Return with no value\n");
+        
+        if (expected_return_type != 0) {
+            printf("  Semantic Error: Function '%s' declared with return type '%s' but returns no value\n", 
+                   current_function->name, get_type_name(expected_return_type));
+            semantic_errors++;
+        } else {
+            printf("  Empty return validated successfully (no return type declared)\n");
+        }
+        return;
+    }
+    
+    // Get the type of the returned expression
+    int actual_return_type = get_expression_type(return_node->left, curr_scope);
+    
+    printf("  Validating return type: expected %s, got %s\n", 
+           get_type_name(expected_return_type),
+           get_type_name(actual_return_type));
+    
+    // Check if function is declared without return type
+    if (expected_return_type == 0) {
+        printf("  Semantic Error: Function '%s' has no declared return type but returns a value\n", 
+               current_function->name);
+        semantic_errors++;
+        return;
+    }
+    
+    // Check if actual return type matches expected
+    if (actual_return_type == 0) {
+        printf("  Warning: Cannot determine type of return expression in function '%s'\n", 
+               current_function->name);
+        return;
+    }
+    
+    if (actual_return_type != expected_return_type) {
+        printf("  Semantic Error: Return type mismatch in function '%s'\n", current_function->name);
+        printf("    Expected: %s, Got: %s\n", 
+               get_type_name(expected_return_type), 
+               get_type_name(actual_return_type));
+        semantic_errors++;
+        return;
+    }
+    
+    printf("  Return statement validated successfully\n");
 }
 
 // Handle assignment with type checking
@@ -974,7 +1037,8 @@ void process_params_for_function(node* param_node, function_info* func_info, sco
     process_params_for_function(param_node->right, func_info, func_scope);
 }
 
-// Check if a node represents a variable usage (not declaration/assignment)
+// Updated analyze_node function with return handling and current function tracking
+
 void analyze_node(node* root, node* parent, scope* curr_scope) {
     if (!root) return;
     
@@ -996,6 +1060,10 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
             function_info* func_info = add_function_declaration(root->left->token, return_type);
             
             if (func_info) {
+                // SET CURRENT FUNCTION CONTEXT for return validation
+                function_info* previous_function = current_function;
+                current_function = func_info;
+                
                 // Validate __main__ function requirements
                 validate_main_function(root, func_scope);
                 
@@ -1022,14 +1090,25 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
                         nodes_to_check[rear++] = check_node->right;
                     }
                 }
+                
+                // Analyze function body with current function context
+                analyze_node(root->left, root, func_scope);
+                analyze_node(root->right, root, func_scope);
+                
+                // RESTORE PREVIOUS FUNCTION CONTEXT
+                current_function = previous_function;
             }
         }
-        
-        analyze_node(root->left, root, func_scope);
-        analyze_node(root->right, root, func_scope);
         return;
     }
     
+    // NEW: Check if this is a return statement
+    if (root->token && strcmp(root->token, "return") == 0) {
+        handle_return_statement(root, curr_scope);
+        // Continue with normal traversal to validate the return expression
+    }
+    
+    // Rest of the function remains the same...
     // Check if this is a params node
     if (root->token && strcmp(root->token, "params") == 0) {
         printf("Processing parameters...\n");
