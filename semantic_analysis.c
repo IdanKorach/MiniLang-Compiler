@@ -1,7 +1,6 @@
 #include "semantic_analysis.h"
 
 // We need to define the node structure to access AST
-// This should match what's in your ast.y file
 typedef struct node {
     char *token;
     struct node *left;
@@ -24,6 +23,14 @@ typedef struct scope {
     struct scope* parent;
     char* scope_name;  // For debugging
 } scope;
+
+// Global list to track all declared functions
+typedef struct function_list {
+    char* name;
+    struct function_list* next;
+} function_list;
+
+function_list* declared_functions = NULL;
 
 // Type constants
 #define TYPE_INT 1
@@ -71,6 +78,93 @@ void add_variable(scope* curr_scope, char* name, int type) {
     printf("  Added variable '%s' of type '%s' to scope %s\n", 
            name, get_type_name(type), 
            curr_scope->scope_name ? curr_scope->scope_name : "global");
+}
+
+// Function to add a function to the global list and check for duplicates
+void add_function_declaration(char* func_name) {
+    // Check if function already exists
+    function_list* current = declared_functions;
+    while (current) {
+        if (strcmp(current->name, func_name) == 0) {
+            printf("  Semantic Error: Function '%s' already declared\n", func_name);
+            semantic_errors++;
+            return;
+        }
+        current = current->next;
+    }
+    
+    // Add new function to the list
+    function_list* new_func = (function_list*)malloc(sizeof(function_list));
+    new_func->name = strdup(func_name);
+    new_func->next = declared_functions;
+    declared_functions = new_func;
+    
+    printf("  Function '%s' declared successfully\n", func_name);
+}
+
+// Fully inlined version without separate helper function
+void validate_main_function(node* func_node, scope* func_scope) {
+    if (!func_node || !func_node->left || !func_node->left->token) {
+        return;
+    }
+    
+    // Check if this is the __main__ function
+    if (strcmp(func_node->left->token, "__main__") != 0) {
+        return;
+    }
+    
+    printf("Validating __main__ function requirements...\n");
+    
+    node* func_body = func_node->right;
+    if (!func_body) return;
+    
+    int has_params = 0;
+    int has_return_type = 0;
+    
+    // Use a stack-based approach or simple iterative search
+    // We'll check all visible nodes in the immediate structure
+    
+    // Check direct children and their children
+    node* nodes_to_check[25] = {func_body, NULL}; // Simple array for BFS
+    int front = 0, rear = 1;
+    
+    while (front < rear && rear < 25) {
+        node* current = nodes_to_check[front++];
+        if (!current) continue;
+        
+        if (current->token) {
+            if (strcmp(current->token, "params") == 0) {
+                if (current->left || current->right) {
+                    has_params = 1;
+                }
+            }
+            else if (strcmp(current->token, "return_type") == 0) {
+                has_return_type = 1;
+            }
+        }
+        
+        // Add children to queue
+        if (current->left && rear < 25) {
+            nodes_to_check[rear++] = current->left;
+        }
+        if (current->right && rear < 25) {
+            nodes_to_check[rear++] = current->right;
+        }
+    }
+    
+    if (has_params) {
+        printf("  Semantic Error: __main__ function cannot have parameters\n");
+        semantic_errors++;
+    } else {
+        printf("  __main__ parameters: ✓ (none)\n");
+    }
+    
+    if (has_return_type) {
+        printf("  Semantic Error: __main__ function cannot have a return type\n");
+        semantic_errors++;
+    } else {
+        printf("  __main__ return type: ✓ (none)\n");
+    }
 }
 
 // Check if variable exists in current scope (for redeclaration check)
@@ -158,7 +252,6 @@ int looks_like_string_literal(char* token) {
 }
 
 // Get the type of an expression node
-// Fixed get_expression_type function
 int get_expression_type(node* expr_node, scope* curr_scope) {
     if (!expr_node || !expr_node->token) {
         return 0; // Unknown type
@@ -547,7 +640,6 @@ void handle_initialization(node* init_node, scope* curr_scope) {
 }
 
 // Check if a node represents a variable usage (not declaration/assignment)
-// Updated analyze_node - cleaner handling of init nodes
 void analyze_node(node* root, node* parent, scope* curr_scope) {
     if (!root) return;
     
@@ -561,6 +653,12 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
         if (root->left && root->left->token) {
             func_scope->scope_name = strdup(root->left->token);
             printf("Entering function scope: %s\n", func_scope->scope_name);
+
+            // Track function declaration for duplicate checking
+            add_function_declaration(root->left->token);
+        
+            // Validate __main__ function requirements
+            validate_main_function(root, func_scope);
         }
         
         analyze_node(root->left, root, func_scope);
@@ -619,6 +717,9 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
 void semantic_analysis(struct node* root, scope* curr_scope) {
     // Cast the struct node* to our node* type
     node* ast_root = (node*)root;
+
+    // Initialize function tracking list
+    declared_functions = NULL;
     
     // Analyze the entire AST
     analyze_node(ast_root, NULL, curr_scope);

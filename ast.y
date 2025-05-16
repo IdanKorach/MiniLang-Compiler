@@ -73,18 +73,34 @@ program: function program {$$ = mknode("", $1, $2);}
        ;
 
 function: DEF ID '(' param_list ')' ARROW type COLON '{' statements '}' {
+            printf("DEBUG AST: Creating function with params and return type\n");
+            printf("  Function name: %s\n", $2->token);
+            printf("  Has params: YES\n");
+            printf("  Has return type: YES (%s)\n", $7->token);
             $$ = mknode("function", $2, mknode("", mknode("", mknode("params", $4, NULL), mknode("return_type", $7, NULL)), $10));
             if (strcmp($2->token, "__main__") == 0) main_function_found++;
           }
         | DEF ID '(' param_list ')' COLON '{' statements '}' {
+            printf("DEBUG AST: Creating function with params, no return type\n");
+            printf("  Function name: %s\n", $2->token);
+            printf("  Has params: YES\n");
+            printf("  Has return type: NO\n");
             $$ = mknode("function", $2, mknode("", mknode("params", $4, NULL), $8));
             if (strcmp($2->token, "__main__") == 0) main_function_found++;
           }
         | DEF ID '(' ')' ARROW type COLON '{' statements '}' {
+            printf("DEBUG AST: Creating function with no params, with return type\n");
+            printf("  Function name: %s\n", $2->token);
+            printf("  Has params: NO\n");
+            printf("  Has return type: YES (%s)\n", $6->token);
             $$ = mknode("function", $2, mknode("", mknode("", mknode("params", NULL, NULL), mknode("return_type", $6, NULL)), $9));
             if (strcmp($2->token, "__main__") == 0) main_function_found++;
           }
         | DEF ID '(' ')' COLON '{' statements '}' {
+            printf("DEBUG AST: Creating function with no params, no return type\n");
+            printf("  Function name: %s\n", $2->token);
+            printf("  Has params: NO\n");
+            printf("  Has return type: NO\n");
             $$ = mknode("function", $2, mknode("", mknode("params", NULL, NULL), $7));
             if (strcmp($2->token, "__main__") == 0) main_function_found++;
           }
