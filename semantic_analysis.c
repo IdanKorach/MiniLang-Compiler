@@ -187,6 +187,52 @@ int count_function_arguments(node* args_node) {
     return count;
 }
 
+// Helper function to extract argument nodes from function call
+// Returns an array of argument nodes and sets count
+node** extract_function_arguments(node* args_node, int* arg_count) {
+    if (!args_node) {
+        *arg_count = 0;
+        return NULL;
+    }
+    
+    // First, count the arguments to allocate the array
+    *arg_count = count_function_arguments(args_node);
+    
+    if (*arg_count == 0) {
+        return NULL;
+    }
+    
+    // Allocate array to hold argument nodes
+    node** arg_nodes = (node**)malloc(*arg_count * sizeof(node*));
+    int index = 0;
+    
+    // Extract argument nodes
+    node* current = args_node;
+    
+    // Handle single argument case
+    if (current->token && strlen(current->token) > 0) {
+        arg_nodes[index] = current;
+        return arg_nodes;
+    }
+    
+    // Handle multiple arguments connected by empty nodes
+    while (current && index < *arg_count) {
+        if (current->token && strlen(current->token) > 0) {
+            // This is an argument
+            arg_nodes[index++] = current;
+            break; // Single argument
+        } else {
+            // This is a connector node
+            if (current->left && current->left->token && strlen(current->left->token) > 0) {
+                arg_nodes[index++] = current->left;
+            }
+            current = current->right;
+        }
+    }
+    
+    return arg_nodes;
+}
+
 // Fully inlined version without separate helper function
 void validate_main_function(node* func_node, scope* func_scope) {
     if (!func_node || !func_node->left || !func_node->left->token) {
@@ -730,7 +776,7 @@ void handle_initialization(node* init_node, scope* curr_scope) {
     printf("=== DEBUG: Exiting handle_initialization ===\n");
 }
 
-// Handle_function_call with argument count validation
+// Enhanced handle_function_call with argument count and type validation
 void handle_function_call(node* call_node, scope* curr_scope) {
     if (!call_node || !call_node->left || !call_node->left->token) {
         printf("  Semantic Error: Invalid function call node\n");
@@ -785,6 +831,47 @@ void handle_function_call(node* call_node, scope* curr_scope) {
     }
     
     printf("  Function call '%s' argument count validated successfully\n", func_name);
+    
+    // NEW: Validate argument types
+    if (args_passed > 0 && call_node->right) {
+        printf("  Validating argument types...\n");
+        
+        // Extract argument nodes
+        int arg_count;
+        node** arg_nodes = extract_function_arguments(call_node->right, &arg_count);
+        
+        if (arg_nodes && arg_count == args_passed) {
+            for (int i = 0; i < args_passed; i++) {
+                // Get the type of the argument
+                int arg_type = get_expression_type(arg_nodes[i], curr_scope);
+                int expected_type = func_info->param_types[i];
+                
+                printf("    Arg %d: expected %s, got %s\n", 
+                       i + 1, 
+                       get_type_name(expected_type),
+                       get_type_name(arg_type));
+                
+                if (arg_type == 0) {
+                    printf("  Warning: Cannot determine type of argument %d for function '%s'\n", 
+                           i + 1, func_name);
+                } else if (arg_type != expected_type) {
+                    printf("  Semantic Error: Type mismatch for argument %d in function '%s'\n", 
+                           i + 1, func_name);
+                    printf("    Expected: %s, Got: %s\n", 
+                           get_type_name(expected_type), 
+                           get_type_name(arg_type));
+                    semantic_errors++;
+                }
+            }
+        }
+        
+        // Free the allocated array
+        if (arg_nodes) {
+            free(arg_nodes);
+        }
+        
+        printf("  Argument type validation completed\n");
+    }
 }
 
 // Helper function to extract return type from function AST
