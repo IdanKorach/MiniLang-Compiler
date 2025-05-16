@@ -7,9 +7,6 @@ typedef struct node {
     struct node *right;
 } node;
 
-// Global variable to track semantic errors
-int semantic_errors = 0;
-
 // Define our variable structure
 typedef struct var {
     char* name;
@@ -31,6 +28,9 @@ typedef struct function_list {
 } function_list;
 
 function_list* declared_functions = NULL;
+
+// Global variable to track semantic errors
+int semantic_errors = 0;
 
 // Type constants
 #define TYPE_INT 1
@@ -524,6 +524,7 @@ int is_variable_usage(node* var_node, node* parent_node) {
         strcmp(var_node->token, "function") == 0 ||
         strcmp(var_node->token, "params") == 0 ||
         strcmp(var_node->token, "return_type") == 0 ||
+        strcmp(var_node->token, "call") == 0 ||
         strcmp(var_node->token, "if") == 0 ||
         strcmp(var_node->token, "while") == 0 ||
         strcmp(var_node->token, "return") == 0) {
@@ -568,6 +569,18 @@ int is_variable_usage(node* var_node, node* parent_node) {
     
     printf("DEBUG: ACCEPTED as variable usage!\n");
     return 1;
+}
+
+// Function to check if a function has been declared
+int is_function_declared(char* func_name) {
+    function_list* current = declared_functions;
+    while (current) {
+        if (strcmp(current->name, func_name) == 0) {
+            return 1; // Function found
+        }
+        current = current->next;
+    }
+    return 0; // Function not found
 }
 
 // Fixed handle_initialization - no recursive analyze_node call
@@ -639,6 +652,30 @@ void handle_initialization(node* init_node, scope* curr_scope) {
     printf("=== DEBUG: Exiting handle_initialization ===\n");
 }
 
+// Handle function call validation
+void handle_function_call(node* call_node, scope* curr_scope) {
+    if (!call_node || !call_node->left || !call_node->left->token) {
+        printf("  Semantic Error: Invalid function call node\n");
+        semantic_errors++;
+        return;
+    }
+    
+    char* func_name = call_node->left->token;
+    
+    printf("Found function call: %s\n", func_name);
+    
+    // Check if function has been declared
+    if (!is_function_declared(func_name)) {
+        printf("  Semantic Error: Function '%s' called before declaration\n", func_name);
+        semantic_errors++;
+        return;
+    }
+    
+    printf("  Function call '%s' validated successfully\n", func_name);
+    
+    // TODO: In the future, we could add parameter validation here
+}
+
 // Check if a node represents a variable usage (not declaration/assignment)
 void analyze_node(node* root, node* parent, scope* curr_scope) {
     if (!root) return;
@@ -653,10 +690,10 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
         if (root->left && root->left->token) {
             func_scope->scope_name = strdup(root->left->token);
             printf("Entering function scope: %s\n", func_scope->scope_name);
-
+            
             // Track function declaration for duplicate checking
             add_function_declaration(root->left->token);
-        
+            
             // Validate __main__ function requirements
             validate_main_function(root, func_scope);
         }
@@ -700,6 +737,12 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
             printf("%s\n", root->left->token);
             handle_assignment(root, curr_scope);
         }
+    }
+    
+    // Check if this is a function call
+    if (root->token && strcmp(root->token, "call") == 0) {
+        handle_function_call(root, curr_scope);
+        // Continue with normal traversal to check arguments
     }
     
     // Check if this is a variable usage

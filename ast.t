@@ -1,11 +1,12 @@
 def func1(): {
-    int x = 1;  # Valid
+    int x = 1;
 }
 
 def func2(): {
-    int x = 2;  # Valid - different scope
+    func1();  # Valid - func1 declared above
 }
 
 def __main__(): {
-    int x = 3;  # Valid - different scope
+    func1();  # Valid
+    func2();  # Valid
 }
