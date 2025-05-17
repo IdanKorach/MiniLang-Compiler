@@ -30,11 +30,12 @@ typedef struct function_info {
     char** param_names;      // Array of parameter names
     int* has_default;        // Array indicating which params have defaults
     int return_type;         // 0 for no return type, TYPE_INT/STRING/etc for others
+    int declaration_position; // Track declaration position or line number
     struct function_info* next;
 } function_info;
 
 // Debug level flag: 0 = errors only, 1 = basic info, 2 = verbose debug
-int debug_level = 1;  // Default: show basic info, but not detailed debug
+int debug_level = 0;  // Default: show basic info, but not detailed debug
 
 // Simple logging function with debug level control
 void log_debug(const char* message) {
@@ -92,8 +93,12 @@ void log_error_format(const char* format, ...) {
 function_info* declared_functions = NULL;
 // Global variable to track current function context for return type validation
 function_info* current_function = NULL;
+// Global counter for tracking declaration order
+int declaration_counter = 0;
 // Global variable to track semantic errors
 int semantic_errors = 0;
+// Global variable to track current position in AST traversal
+int current_position = 0;
 
 int get_expression_type(node* expr_node, scope* curr_scope);
 int check_index_operation(node* node, scope* current_scope);
@@ -108,6 +113,7 @@ function_info* create_function_info(char* name, int return_type) {
     new_func->param_names = NULL;
     new_func->has_default = NULL;
     new_func->return_type = return_type;
+    new_func->declaration_position = 0;
     new_func->next = declared_functions;
     return new_func;
 }
@@ -186,6 +192,7 @@ function_info* add_function_declaration(char* func_name, int return_type) {
     
     // Create new function info
     function_info* new_func = create_function_info(func_name, return_type);
+    new_func->declaration_position = declaration_counter++;
     declared_functions = new_func;
     
     if (return_type != 0) {
@@ -364,18 +371,25 @@ var* find_variable_in_scope(scope* curr_scope, char* name) {
 
 // Check if variable exists in current scope OR any parent scope (for usage check)
 var* find_variable_in_scope_hierarchy(scope* curr_scope, char* name) {
+    // log_debug_format("Looking for variable '%s' in scope hierarchy", name);
     scope* temp_scope = curr_scope;
     
     while (temp_scope != NULL) {
+        // log_debug_format("Checking scope: %s", temp_scope->scope_name ? temp_scope->scope_name : "unnamed");
         var* temp_var = temp_scope->variables;
         while (temp_var != NULL) {
             if (strcmp(temp_var->name, name) == 0) {
+                // log_debug_format("Found variable '%s' in scope %s", name, 
+                                // temp_scope->scope_name ? temp_scope->scope_name : "unnamed");
                 return temp_var;
             }
             temp_var = temp_var->next;
         }
+        // log_debug_format("Variable '%s' not found in scope %s, checking parent", name, 
+                        // temp_scope->scope_name ? temp_scope->scope_name : "unnamed");
         temp_scope = temp_scope->parent;
     }
+    // log_debug_format("Variable '%s' not found in any scope", name);
     return NULL;
 }
 
@@ -604,7 +618,6 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
         return TYPE_STRING;
     }
     
-    // Function calls - for now return unknown type
     if (strcmp(expr_node->token, "call") == 0) {
         if (!expr_node->left || !expr_node->left->token) {
             log_debug("Invalid function call in expression");
@@ -617,7 +630,14 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
         // Find the function in our declared functions list
         function_info* func_info = find_function_by_name(func_name);
         if (!func_info) {
+            log_error_format("Function '%s' called before declaration", func_name); // Add this line
             log_debug_format("Function '%s' not found, can't determine return type", func_name);
+            return 0;
+        }
+        
+        // Check if function was declared before current position (if using position tracking)
+        if (func_info->declaration_position >= current_position) {
+            log_error_format("Function '%s' called before declaration", func_name);
             return 0;
         }
         
@@ -625,7 +645,7 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
         log_debug_format("Function '%s' has return type: %s", 
                     func_name, get_type_name(func_info->return_type));
         return func_info->return_type;
-    }               
+    }         
     
     // If we reach here, it's likely an undeclared variable or unknown operator
     log_debug("Undeclared identifier - returning unknown type");
@@ -665,30 +685,68 @@ int check_index_operation(node* node, scope* current_scope) {
         return 0;
     }
     
-    // Get the variable name (LHS) and check if it's a string
-    char* var_name = node->left->token;
-    var* found_var = find_variable_in_scope_hierarchy(current_scope, var_name);
-    
-    if (!found_var) {
-        log_error_format("Variable '%s' used in indexing operation before declaration", var_name);
+    // Get the string expression (LHS)
+    if (!node->left) {
+        log_error("Invalid index operation: missing variable");
         return 0;
     }
     
-    if (found_var->type != TYPE_STRING) {
-        log_error_format("Index operator '[]' can only be used with string type, but '%s' is of type '%s'", 
-                       var_name, get_type_name(found_var->type));
+    // Get the type of the string expression
+    int string_type = 0;
+    if (node->left->token) {
+        // Check if it's a variable name
+        var* found_var = find_variable_in_scope_hierarchy(current_scope, node->left->token);
+        if (found_var) {
+            string_type = found_var->type;
+            log_debug_format("Found variable '%s' with type %d for indexing", node->left->token, string_type);
+        } else {
+            // Otherwise, evaluate as an expression
+            string_type = get_expression_type(node->left, current_scope);
+        }
+    } else {
+        string_type = get_expression_type(node->left, current_scope);
+    }
+    
+    if (string_type != TYPE_STRING) {
+        log_error_format("Index operator '[]' can only be used with string type, got '%s'", 
+                        get_type_name(string_type));
         return 0;
     }
     
     // Now check if the index (RHS) is an integer
-    int index_type = get_expression_type(node->right, current_scope);
+    if (!node->right) {
+        log_error("Invalid index operation: missing index expression");
+        return 0;
+    }
+    
+    // Get the type of the index expression
+    int index_type = 0;
+    if (node->right->token) {
+        // Check if it's a variable name
+        var* found_var = find_variable_in_scope_hierarchy(current_scope, node->right->token);
+        if (found_var) {
+            index_type = found_var->type;
+            log_debug_format("Found variable '%s' with type %d for index", node->right->token, index_type);
+        } else {
+            // Try to evaluate as a literal
+            if (node->right->token[0] >= '0' && node->right->token[0] <= '9') {
+                index_type = TYPE_INT;
+                log_debug("Detected int literal for index");
+            } else {
+                // Evaluate as an expression
+                index_type = get_expression_type(node->right, current_scope);
+            }
+        }
+    } else {
+        index_type = get_expression_type(node->right, current_scope);
+    }
     
     if (index_type != TYPE_INT) {
         log_error_format("String index must be of integer type, got '%s'", get_type_name(index_type));
         return 0;
     }
     
-    // If both checks pass, the result is a string
+    // If both checks pass, the result is a string (a single character is still a string in this language)
     log_info("String indexing operation validated successfully");
     return TYPE_STRING;
 }
@@ -1046,6 +1104,12 @@ void handle_function_call(node* call_node, scope* curr_scope) {
         log_error_format("Function '%s' called before declaration", func_name);
         return;
     }
+
+    // Check if function was declared before current position
+    if (func_info->declaration_position >= current_position) {
+        log_error_format("Function '%s' called before declaration", func_name);
+        return;
+    }
     
     // Count the arguments passed to the function
     int args_passed = 0;
@@ -1188,6 +1252,9 @@ void process_params_for_function(node* param_node, function_info* func_info, sco
             log_info_format("Found parameter: %s %s", param_node->token, param_name);
             add_parameter_to_function(func_info, param_name, param_type, has_default_value);
             
+            // Add to the function scope (not a different scope)
+            add_variable(func_scope, param_name, param_type);
+
             // Check default value type if it exists
             if (has_default_value && default_value_node) {
                 log_debug_format("Checking default value for parameter '%s'...", param_name);
@@ -1217,9 +1284,13 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
 
     log_debug_format("analyze_node called with token='%s'", 
                     root->token ? root->token : "NULL");
+
+    // Increment position counter
+    current_position++;
    
     // Check if this is a function declaration
     if (root->token && strcmp(root->token, "function") == 0) {
+        // Create a scope for this function
         scope* func_scope = mkscope(curr_scope);
         
         if (root->left && root->left->token) {
@@ -1239,7 +1310,11 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
                 
                 validate_main_function(root, func_scope);
                 
+                // Find and process params node
                 node* current = root->right;
+                node* params_node = NULL;
+                
+                // Find the params node
                 node* nodes_to_check[50] = {current};
                 int front = 0, rear = 1;
                 
@@ -1248,9 +1323,8 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
                     if (!check_node) continue;
                     
                     if (check_node->token && strcmp(check_node->token, "params") == 0) {
-                        log_info("Processing parameters...");
-                        process_params_for_function(check_node, func_info, func_scope);
-                        break; // We found and processed params, no need to continue
+                        params_node = check_node;
+                        break;
                     }
                     
                     if (check_node->left && rear < 50) {
@@ -1261,7 +1335,13 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
                     }
                 }
                 
-                analyze_node(root->left, root, func_scope);
+                // Process params if found
+                if (params_node) {
+                    log_info("Processing parameters...");
+                    process_params_for_function(params_node, func_info, func_scope);
+                }
+                
+                // Now process the function body with the same scope
                 analyze_node(root->right, root, func_scope);
                 
                 // RESTORE PREVIOUS FUNCTION CONTEXT
@@ -1271,30 +1351,78 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
         return;
     }
 
-    // Check if this is a string indexing operation
     if (root->token && strcmp(root->token, "index") == 0) {
         log_info("Found string indexing operation");
-        // Check the string variable
+        
+        // Handle the string expression (left child)
         if (root->left) {
-            node* var_node = root->left;
-            handle_variable_usage(var_node, curr_scope);
+            if (is_variable_usage(root->left, root)) {
+                handle_variable_usage(root->left, curr_scope);
+            } else {
+                analyze_node(root->left, root, curr_scope);
+            }
         }
         
-        // Check the index expression
+        // Handle the index expression (right child)
         if (root->right) {
-            analyze_node(root->right, root, curr_scope);
-        }        
+            if (is_variable_usage(root->right, root)) {
+                handle_variable_usage(root->right, curr_scope);
+            } else {
+                analyze_node(root->right, root, curr_scope);
+            }
+        }
+        
+        // We've handled the children directly, so return to avoid processing them again
         return;
     }
     
     // Check if this is an if statement
     if (root->token && strcmp(root->token, "if") == 0) {
+        // Validate the condition first
         handle_if_statement(root, curr_scope);
+        
+        // Now handle the body with a new scope
+        if (root->right) {
+            // Create a new scope for the if-block
+            scope* block_scope = mkscope(curr_scope);
+            if (curr_scope->scope_name) {
+                char name_buffer[256];
+                sprintf(name_buffer, "%s-if-block", curr_scope->scope_name);
+                block_scope->scope_name = strdup(name_buffer);
+            } else {
+                block_scope->scope_name = strdup("if-block");
+            }
+            
+            // Process the if body with the new scope
+            analyze_node(root->right, root, block_scope);
+            
+            // Skip the normal child traversal since we've already handled the body
+            return;
+        }
     }
 
     // Check if this is a while statement
     if (root->token && strcmp(root->token, "while") == 0) {
+        // Validate the condition first
         handle_while_statement(root, curr_scope);
+        
+        if (root->right) {
+            // Create a new scope for the while-block
+            scope* block_scope = mkscope(curr_scope);
+            if (curr_scope->scope_name) {
+                char name_buffer[256];
+                sprintf(name_buffer, "%s-while-block", curr_scope->scope_name);
+                block_scope->scope_name = strdup(name_buffer);
+            } else {
+                block_scope->scope_name = strdup("while-block");
+            }
+            
+            // Process the while body with the new scope
+            analyze_node(root->right, root, block_scope);
+            
+            // Skip the normal child traversal
+            return;
+        }
     }
 
     if (root->token && (strcmp(root->token, "if-else") == 0 || 
@@ -1305,6 +1433,17 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
             handle_if_statement(if_part, curr_scope);
         }
     }       
+
+    // Check if this is a code block (often represented by a node with an empty token)
+    if (root->token && strcmp(root->token, "") == 0 && root->left && root->right) {
+        // This might be a code block
+        scope* block_scope = mkscope(curr_scope);
+        block_scope->scope_name = strdup("block");
+        
+        analyze_node(root->left, root, block_scope);
+        analyze_node(root->right, root, block_scope);
+        return;
+    }
 
     // Check if this is a return statement
     if (root->token && strcmp(root->token, "return") == 0) {
@@ -1362,8 +1501,13 @@ void semantic_analysis(struct node* root, scope* curr_scope) {
     node* ast_root = (node*)root;
 
     log_info("=== Starting semantic analysis ===");
+
     // Initialize function tracking list
     declared_functions = NULL;
+    
+    // Initialize counters for declaration order tracking
+    declaration_counter = 0;
+    current_position = 0;
     
     // Analyze the entire AST
     analyze_node(ast_root, NULL, curr_scope);
