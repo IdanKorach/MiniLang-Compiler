@@ -17,7 +17,10 @@ A yacc/lex-based compiler frontend that parses source code, builds an Abstract S
   - Assignment type checking with comprehensive expression evaluation
   - If/while statement condition validation (must be boolean type)
   - Redeclaration error detection
-  - Scope isolation and hierarchical variable lookup
+  - Scope isolation with hierarchical variable lookup
+  - Block-level scoping for if/while statements
+  - Function declaration order enforcement
+  - String indexing validation (string[index] syntax)
   - Comprehensive string literal handling with escape sequences
 - **Error Handling**: Detailed error reporting for syntax and semantic issues
 
@@ -92,13 +95,16 @@ string name = "example";
 bool flag = true;
 ```
 
-#### String Literals
+#### String Literals and Operations
 ```python
 string simple = "hello world";
 string empty = "";
 string with_escape = "Say \"Hello\"";
 string with_newline = "Line 1\nLine 2";
 string single_quoted = 'also supported';
+
+# String indexing
+string first_char = name[0];
 ```
 
 #### Parameter Types
@@ -214,6 +220,10 @@ Found return statement in function 'test1'
   - Assignment type checking with expression evaluation
   - Redeclaration checking within same scope
   - Scope isolation between functions
+  - Block-level scoping for if/while statements
+- **String Operations**:
+  - String indexing validation with type checking
+  - String concatenation with the `+` operator
 - **Type System**:
   - Four data types: `int`, `float`, `string`, `bool`
   - Comprehensive literal detection (numbers, strings, booleans)
@@ -225,10 +235,10 @@ Found return statement in function 'test1'
   - Semantic error counting and reporting
 
 ### 🚧 **Future Enhancements**
-- String indexing validation (string[index] syntax)
-- Block scopes for if/while statements
 - More complex expression evaluation
-- Control flow analysis
+- Control flow analysis (dead code detection)
+- Array and data structure support
+- Optimizations and code generation
 
 ## Grammar Features
 
@@ -250,6 +260,7 @@ Found return statement in function 'test1'
 - Function calls with argument validation
 - Return statements with type checking
 - Comments (using `#`)
+- Block-level scoping for control structures
 
 ## Error Handling
 
@@ -278,6 +289,9 @@ The compiler provides detailed error messages for:
 - **Control flow errors**:
   - `if-statement condition must be boolean type. Expected: bool, Got: int`
   - `while-loop condition must be boolean type. Expected: bool, Got: string`
+- **String indexing errors**:
+  - `String index must be of integer type, got 'bool'`
+  - `Index operator '[]' can only be used with string type, got 'int'`
 - **Redeclaration**: `Variable 'x' already declared in this scope`
 - **Invalid types**: `Unknown type 'invalidtype'`
 - **Missing main**: `Error: No '__main__' function found.`
@@ -289,9 +303,9 @@ The compiler provides detailed error messages for:
 ├── ast.l                    # Lex lexical analyzer with string literal support
 ├── semantic_analysis.h      # Header for semantic analysis
 ├── semantic_analysis.c      # Semantic analysis implementation
-├── .gitignore              # Git ignore file for generated/compiled files
-├── README.md               # This file
-└── test_files/             # Sample input files
+├── .gitignore               # Git ignore file for generated/compiled files
+├── README.md                # This file
+└── test_files/              # Sample input files
 ```
 
 ## Testing
@@ -304,6 +318,8 @@ The compiler has been thoroughly tested with:
 - If/while condition validation
 - Variable usage and scope management
 - Assignment type checking
+- Block-level scoping
+- String indexing operations
 - Error detection and reporting
 - Complex expression evaluation
 - Various string literal formats (empty, quoted, escaped)
@@ -315,11 +331,17 @@ The compiler has been thoroughly tested with:
 ```python
 def calculate(int x; float rate: 2.5; bool debug: false) -> float: {
     if (debug): {
-        print("Calculating...");
+        # Local variable in if-block scope
+        string message = "Calculating...";
     }
     
     float result = x * rate;
     return result;
+}
+
+def get_char(string text; int index) -> string: {
+    # String indexing returns a string (single character)
+    return text[index];
 }
 
 def test_conditions() -> bool: {
@@ -339,7 +361,8 @@ def test_conditions() -> bool: {
 
 def __main__(): {
     calculate(10, 3.0, true);
-    test_conditions();
+    string first = get_char("Hello", 0);
+    bool result = test_conditions();
 }
 ```
 
@@ -361,6 +384,13 @@ def errors() -> int: {
     
     # Error: return type mismatch
     return "string";  # Expected int
+    
+    # Error: function called before declaration
+    int x = undefined_function(10);
+    
+    # Error: non-string indexed with []
+    int num = 42;
+    int digit = num[0];  # Only strings can be indexed
 }
 ```
 
