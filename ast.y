@@ -10,7 +10,7 @@
 %left AND  
 %left EQ GT GE LT LE NE IS
 %left PLUS MINUS
-%left MUL DIV
+%left MUL DIV MOD
 %right POW
 
 %{

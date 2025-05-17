@@ -103,8 +103,9 @@ string with_escape = "Say \"Hello\"";
 string with_newline = "Line 1\nLine 2";
 string single_quoted = 'also supported';
 
-# String indexing
-string first_char = name[0];
+# String indexing (single character access only)
+string first_char = name[0];  # Returns a string containing single character
+# Note: String slicing (e.g., text[0:5]) is not supported
 ```
 
 #### Parameter Types
@@ -222,7 +223,7 @@ Found return statement in function 'test1'
   - Scope isolation between functions
   - Block-level scoping for if/while statements
 - **String Operations**:
-  - String indexing validation with type checking
+  - String indexing validation with type checking (single character access only)
   - String concatenation with the `+` operator
 - **Type System**:
   - Four data types: `int`, `float`, `string`, `bool`
@@ -254,7 +255,7 @@ Found return statement in function 'test1'
 - Logical: `and`, `or`, `not`
 
 ### Language Constructs
-- Function definitions with typed parameters and default values
+- Function definitions with typed parameters and default values (no nested functions)
 - Variable declarations and assignments
 - Control flow (`if`/`elif`/`else`, `while`) with boolean conditions
 - Function calls with argument validation
