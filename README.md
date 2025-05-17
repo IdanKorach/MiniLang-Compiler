@@ -1,19 +1,23 @@
 # MiniLang Compiler
 
-A yacc/lex-based compiler frontend that parses source code, builds an Abstract Syntax Tree (AST), and performs semantic analysis with type checking and symbol table management.
+A yacc/lex-based compiler frontend that parses source code, builds an Abstract Syntax Tree (AST), and performs comprehensive semantic analysis with advanced type checking and symbol table management.
 
 ## Features
 
 - **Lexical Analysis**: Tokenizes source code using flex/lex with robust string literal handling
 - **Syntax Analysis**: Parses tokens into an AST using yacc/bison
 - **AST Generation**: Creates a structured tree representation of the code
-- **Semantic Analysis**: 
+- **Advanced Semantic Analysis**: 
   - Variable declaration tracking with scope management
-  - Function parameter validation with default values support
-  - Symbol table construction with scope isolation
-  - Type checking for declarations, assignments, and initializations
+  - Function signature validation with complete parameter tracking
+  - Default parameter value type checking
+  - Argument count and type validation for function calls
+  - Return type validation with multiple return statement support
   - Variable usage validation (checks if variables are declared before use)
+  - Assignment type checking with comprehensive expression evaluation
+  - If/while statement condition validation (must be boolean type)
   - Redeclaration error detection
+  - Scope isolation and hierarchical variable lookup
   - Comprehensive string literal handling with escape sequences
 - **Error Handling**: Detailed error reporting for syntax and semantic issues
 
@@ -104,10 +108,12 @@ string single_quoted = 'also supported';
 
 #### Control Structures
 ```python
+# If statements with boolean conditions
 if (condition) : {
     // statements
 }
 
+# While loops with boolean conditions
 while (condition) : {
     // statements
 }
@@ -158,37 +164,69 @@ Entering function scope: test1
 Processing parameters...
 Found parameter: int p1
   Added variable 'p1' of type 'int' to scope test1
+  Added parameter 'p1' (type: int, has_default: no) to function 'test1'
 Found parameter: string p20
   Added variable 'p20' of type 'string' to scope test1
+  Added parameter 'p20' (type: string, has_default: no) to function 'test1'
 Found parameter: float p2
-  Added variable 'p2' of type 'float' to scope test1
+  Added variable 'p2' (type: float, has_default: yes) to function 'test1'
+  Checking default value for parameter 'p2'...
+    Default value type OK: float
 Found parameter: bool p3
-  Added variable 'p3' of type 'bool' to scope test1
-Found declaration: bool temp
-  Added variable 'temp' of type 'bool' to scope test1
-Entering function scope: __main__
+  Added variable 'p3' (type: bool, has_default: yes) to function 'test1'
+  Checking default value for parameter 'p3'...
+    Default value type OK: bool
+Found return statement in function 'test1'
+  Validating return type: expected bool, got bool
+  Return statement validated successfully
 === Semantic analysis completed successfully ===
 ```
 
 ## Current Semantic Analysis Features
 
 ### ✅ **Fully Implemented**
-- **Function scope creation**: Each function gets its own scope
-- **Parameter tracking**: Function parameters (including default values) are added to function scope
-- **Variable declarations**: Local variables are tracked in their scope
-- **Variable usage validation**: Ensures variables are declared before use
-- **Assignment type checking**: Validates type compatibility in assignments and initializations
-- **Redeclaration checking**: Prevents declaring the same variable twice in same scope
-- **Type validation**: Ensures all declared types are valid (int, string, bool, float)
-- **Scope isolation**: Variables in different functions don't conflict
-- **String literal handling**: Comprehensive support for double/single quotes, escape sequences, and special characters
-- **Expression type inference**: Determines types of literals, variables, and expressions
-- **Clean error reporting**: Provides clear, non-redundant error messages
+- **Enhanced Function Management**: Complete function signature tracking with return types and parameters
+- **Parameter Validation**: 
+  - Type checking of parameters
+  - Default value type validation
+  - Parameter name and type tracking
+- **Function Call Validation**:
+  - Argument count validation (considers default parameters)
+  - Argument type checking against parameter types
+  - Function declaration before usage checking
+- **Return Type Validation**:
+  - Validates return statements match declared return type
+  - Handles multiple return statements in same function
+  - Supports variable returns with type inference
+  - Validates functions without return types
+- **Control Flow Validation**:
+  - If statement conditions must be boolean type
+  - While loop conditions must be boolean type
+  - Comprehensive expression evaluation for conditions
+- **Advanced Expression Type System**:
+  - Arithmetic operators (`+`, `-`, `*`, `/`) with type inference
+  - Comparison operators (`>`, `<`, `>=`, `<=`, `==`, `!=`) return boolean
+  - Logical operators (`and`, `or`, `not`) return boolean
+  - Proper handling of operator precedence in type checking
+- **Variable Management**:
+  - Variable declaration tracking with scope management
+  - Variable usage validation (ensures variables are declared before use)
+  - Assignment type checking with expression evaluation
+  - Redeclaration checking within same scope
+  - Scope isolation between functions
+- **Type System**:
+  - Four data types: `int`, `float`, `string`, `bool`
+  - Comprehensive literal detection (numbers, strings, booleans)
+  - String literal handling with escape sequences
+  - Type inference for complex expressions
+- **Error Reporting**:
+  - Clear, detailed error messages with context
+  - Multiple error detection (doesn't stop at first error)
+  - Semantic error counting and reporting
 
 ### 🚧 **Future Enhancements**
+- String indexing validation (string[index] syntax)
 - Block scopes for if/while statements
-- Function call validation and parameter checking
-- Return type checking
 - More complex expression evaluation
 - Control flow analysis
 
@@ -208,9 +246,9 @@ Entering function scope: __main__
 ### Language Constructs
 - Function definitions with typed parameters and default values
 - Variable declarations and assignments
-- Control flow (`if`/`elif`/`else`, `while`)
-- Function calls
-- Return statements
+- Control flow (`if`/`elif`/`else`, `while`) with boolean conditions
+- Function calls with argument validation
+- Return statements with type checking
 - Comments (using `#`)
 
 ## Error Handling
@@ -224,7 +262,22 @@ The compiler provides detailed error messages for:
 
 ### Semantic Errors
 - **Variable usage**: `Variable 'x' used before declaration`
-- **Type mismatches**: `Type mismatch in initialization of 'y'. Expected: int, Got: string`
+- **Type mismatches**: 
+  - `Type mismatch in initialization of 'y'. Expected: int, Got: string`
+  - `Type mismatch in assignment to 'x'. Expected: int, Got: string`
+- **Function errors**:
+  - `Function 'test' already declared`
+  - `Function 'test' called before declaration`
+  - `Too few arguments for function 'test'. Expected at least 2, got 1`
+  - `Type mismatch for argument 1 in function 'test'. Expected: int, Got: string`
+- **Return type errors**:
+  - `Return type mismatch in function 'test'. Expected: int, Got: string`
+  - `Function 'test' declared with return type 'int' but returns no value`
+- **Default value errors**:
+  - `Default value type mismatch for parameter 'x'. Parameter type: int, Default value type: string`
+- **Control flow errors**:
+  - `if-statement condition must be boolean type. Expected: bool, Got: int`
+  - `while-loop condition must be boolean type. Expected: bool, Got: string`
 - **Redeclaration**: `Variable 'x' already declared in this scope`
 - **Invalid types**: `Unknown type 'invalidtype'`
 - **Missing main**: `Error: No '__main__' function found.`
@@ -244,12 +297,72 @@ The compiler provides detailed error messages for:
 ## Testing
 
 The compiler has been thoroughly tested with:
+- Function signature validation and tracking
+- Parameter and argument validation
+- Return type checking with multiple scenarios
+- Default parameter value type checking
+- If/while condition validation
+- Variable usage and scope management
+- Assignment type checking
+- Error detection and reporting
+- Complex expression evaluation
 - Various string literal formats (empty, quoted, escaped)
 - All data types and their combinations
-- Function parameters with and without defaults
-- Variable usage validation and type checking
-- Scope isolation between functions
-- Error detection and reporting
+
+## Example Programs
+
+### Valid Program
+```python
+def calculate(int x; float rate: 2.5; bool debug: false) -> float: {
+    if (debug): {
+        print("Calculating...");
+    }
+    
+    float result = x * rate;
+    return result;
+}
+
+def test_conditions() -> bool: {
+    int count = 0;
+    bool flag = true;
+    
+    if (flag and count > 0): {
+        return true;
+    }
+    
+    while (count < 10): {
+        count = count + 1;
+    }
+    
+    return false;
+}
+
+def __main__(): {
+    calculate(10, 3.0, true);
+    test_conditions();
+}
+```
+
+### Error Examples
+```python
+def errors() -> int: {
+    # Error: if condition must be boolean
+    if (5): {
+        return 1;
+    }
+    
+    # Error: string default for int parameter
+    def bad_func(int x: "hello"): {
+        return;
+    }
+    
+    # Error: wrong argument type
+    calculate("wrong", 2.5, true);
+    
+    # Error: return type mismatch
+    return "string";  # Expected int
+}
+```
 
 ## Contributing
 
@@ -268,4 +381,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - Built using Flex/Lex for lexical analysis
 - Parser generated with Bison/Yacc
 - Semantic analysis using custom symbol table implementation
-- Comprehensive testing for robust string literal and type checking
+- Comprehensive testing for robust type checking and validation

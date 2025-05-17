@@ -1,6 +1,6 @@
 %token NUM ID MINUS PLUS MUL DIV MOD EQ GT GE LT LE NE POW IF ELIF ELSE WHILE RETURN AND OR NOT
 %token DEF PASS ARROW COMMA SEMICOLON FLOAT STRING_LITERAL TRUE FALSE
-%token INT STRING BOOL COLON ERROR_TOKEN IS
+%token INT STRING BOOL COLON ERROR_TOKEN IS 
 
 %nonassoc LOWER_THAN_ELSE
 %nonassoc ELSE
@@ -309,7 +309,7 @@ expr: expr PLUS expr {$$ = mknode("+", $1, $3);}
     | expr DIV expr {$$ = mknode("/", $1, $3);}
     | expr MOD expr {$$ = mknode("%", $1, $3);}
     | expr EQ expr {$$ = mknode("==", $1, $3);}
-    | expr IS expr {$$ = mknode("==", $1, $3);} // added this
+    | expr IS expr {$$ = mknode("==", $1, $3);}
     | expr GT expr {$$ = mknode(">", $1, $3);}
     | expr GE expr {$$ = mknode(">=", $1, $3);}
     | expr LT expr {$$ = mknode("<", $1, $3);}
@@ -319,6 +319,7 @@ expr: expr PLUS expr {$$ = mknode("+", $1, $3);}
     | expr AND expr {$$ = mknode("and", $1, $3);}
     | expr OR expr {$$ = mknode("or", $1, $3);}
     | NOT expr {$$ = mknode("not", NULL, $2);}
+    | ID '[' expr ']' {$$ = mknode("index", $1, $3);}
     | '(' expr ')' {$$ = $2;}
     | '(' expr error { yyerror("Missing closing parenthesis in expression"); YYABORT; }
     | '(' error ')' { yyerror("Invalid expression in parentheses"); yyerrok; $$ = mknode("ERROR", NULL, NULL); YYABORT; }

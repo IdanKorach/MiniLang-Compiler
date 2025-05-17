@@ -36,6 +36,9 @@ function_info* declared_functions = NULL;
 // Global variable to track current function context for return type validation
 function_info* current_function = NULL;
 
+int get_expression_type(node* expr_node, scope* curr_scope);
+int check_index_operation(node* node, scope* current_scope);
+
 // Helper function to create a new function_info
 function_info* create_function_info(char* name, int return_type) {
     function_info* new_func = (function_info*)malloc(sizeof(function_info));
@@ -162,27 +165,23 @@ void add_parameter_to_function(function_info* func, char* param_name, int param_
 int count_function_arguments(node* args_node) {
     if (!args_node) return 0;
     
+    // Special case: If this is a direct argument (not a comma-separated list)
+    // Examples include: a single variable, a single literal, or a complex expression
+    if (strcmp(args_node->token, "") != 0) {
+        return 1;  // This is a single argument
+    }
+    
+    // For a comma-separated list, count the arguments
     int count = 0;
     node* current = args_node;
     
-    // The arguments in the AST are structured as a tree
-    // We need to count all non-empty tokens that represent actual arguments
     while (current) {
-        // If this node has a token that's not empty, it's an argument
-        if (current->token && strlen(current->token) > 0) {
-            count++;
-            // For single argument, we're done
-            if (!current->left && !current->right) {
-                break;
-            }
-        }
-        
-        // Check left child for arguments
+        // Left child is an argument
         if (current->left) {
-            count += count_function_arguments(current->left);
+            count++;
         }
         
-        // Move to right child (next argument in chain)
+        // Move to next argument in the list
         current = current->right;
     }
     
@@ -197,7 +196,7 @@ node** extract_function_arguments(node* args_node, int* arg_count) {
         return NULL;
     }
     
-    // First, count the arguments to allocate the array
+    // First, count the arguments
     *arg_count = count_function_arguments(args_node);
     
     if (*arg_count == 0) {
@@ -206,30 +205,22 @@ node** extract_function_arguments(node* args_node, int* arg_count) {
     
     // Allocate array to hold argument nodes
     node** arg_nodes = (node**)malloc(*arg_count * sizeof(node*));
-    int index = 0;
     
-    // Extract argument nodes
-    node* current = args_node;
-    
-    // Handle single argument case
-    if (current->token && strlen(current->token) > 0) {
-        arg_nodes[index] = current;
+    // Special case: If this is a direct argument (not a comma-separated list)
+    if (strcmp(args_node->token, "") != 0) {
+        arg_nodes[0] = args_node;
         return arg_nodes;
     }
     
-    // Handle multiple arguments connected by empty nodes
+    // For a comma-separated list, extract the arguments
+    int index = 0;
+    node* current = args_node;
+    
     while (current && index < *arg_count) {
-        if (current->token && strlen(current->token) > 0) {
-            // This is an argument
-            arg_nodes[index++] = current;
-            break; // Single argument
-        } else {
-            // This is a connector node
-            if (current->left && current->left->token && strlen(current->left->token) > 0) {
-                arg_nodes[index++] = current->left;
-            }
-            current = current->right;
+        if (current->left) {
+            arg_nodes[index++] = current->left;
         }
+        current = current->right;
     }
     
     return arg_nodes;
@@ -407,23 +398,49 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
         printf("DEBUG: Detected logical operator\n");
         return TYPE_BOOL;
     }
+
+    if (strcmp(expr_node->token, "index") == 0) {
+        printf("DEBUG: Detected string indexing operation\n");
+        return check_index_operation(expr_node, curr_scope);
+    }
     
     // Handle arithmetic operations
     if (strcmp(expr_node->token, "+") == 0 || strcmp(expr_node->token, "-") == 0 ||
         strcmp(expr_node->token, "*") == 0 || strcmp(expr_node->token, "/") == 0) {
         printf("DEBUG: Detected arithmetic operator\n");
+        
         // Get types of operands
         int left_type = get_expression_type(expr_node->left, curr_scope);
         int right_type = get_expression_type(expr_node->right, curr_scope);
+        
+        // Special case for string concatenation (only for + operator)
+        if (strcmp(expr_node->token, "+") == 0 && 
+            (left_type == TYPE_STRING || right_type == TYPE_STRING)) {
+            return TYPE_STRING;  // Result of string concatenation is a string
+        }
+        
+        // Error check: Can't use strings with -, *, / operators
+        if ((strcmp(expr_node->token, "-") == 0 || 
+            strcmp(expr_node->token, "*") == 0 || 
+            strcmp(expr_node->token, "/") == 0) && 
+            (left_type == TYPE_STRING || right_type == TYPE_STRING)) {
+            printf("  Semantic Error: Cannot use string operands with '%s' operator\n", expr_node->token);
+            semantic_errors++;
+            return 0;  // Invalid type
+        }
+        
+        // For numeric operations:
         
         // If either operand is float, result is float
         if (left_type == TYPE_FLOAT || right_type == TYPE_FLOAT) {
             return TYPE_FLOAT;
         }
+        
         // If both are int, result is int
         if (left_type == TYPE_INT && right_type == TYPE_INT) {
             return TYPE_INT;
         }
+        
         return TYPE_INT; // Default for arithmetic
     }
     
@@ -495,6 +512,44 @@ void validate_condition_type(node* condition_node, scope* curr_scope, const char
     }
     
     printf("  %s condition type validated successfully (bool)\n", context);
+}
+
+// Handle string indexing operations
+int check_index_operation(node* node, scope* current_scope) {
+    if (!node || strcmp(node->token, "index") != 0) {
+        printf("Internal error: check_index_operation called on non-index node\n");
+        return 0;
+    }
+    
+    // Get the variable name (LHS) and check if it's a string
+    char* var_name = node->left->token;
+    var* found_var = find_variable_in_scope_hierarchy(current_scope, var_name);
+    
+    if (!found_var) {
+        printf("  Semantic Error: Variable '%s' used in indexing operation before declaration\n", var_name);
+        semantic_errors++;
+        return 0;
+    }
+    
+    if (found_var->type != TYPE_STRING) {
+        printf("  Semantic Error: Index operator '[]' can only be used with string type, but '%s' is of type '%s'\n", 
+               var_name, get_type_name(found_var->type));
+        semantic_errors++;
+        return 0;
+    }
+    
+    // Now check if the index (RHS) is an integer
+    int index_type = get_expression_type(node->right, current_scope);
+    
+    if (index_type != TYPE_INT) {
+        printf("  Semantic Error: String index must be of integer type, got '%s'\n", get_type_name(index_type));
+        semantic_errors++;
+        return 0;
+    }
+    
+    // If both checks pass, the result is a string
+    printf("  String indexing operation validated successfully\n");
+    return TYPE_STRING;
 }
 
 // Handle return statement validation
@@ -780,12 +835,12 @@ int is_variable_usage(node* var_node, node* parent_node) {
         strcmp(var_node->token, "call") == 0 ||
         strcmp(var_node->token, "if") == 0 ||
         strcmp(var_node->token, "while") == 0 ||
+        strcmp(var_node->token, "index") == 0 ||
         strcmp(var_node->token, "return") == 0) {
         printf("DEBUG: Rejected - is a keyword/operator\n");
         return 0;
     }
     
-    // NEW: Skip arithmetic and comparison operators
     if (strcmp(var_node->token, "+") == 0 ||
         strcmp(var_node->token, "-") == 0 ||
         strcmp(var_node->token, "*") == 0 ||
@@ -1117,7 +1172,6 @@ void process_params_for_function(node* param_node, function_info* func_info, sco
 }
 
 // Updated analyze_node function with return handling and current function tracking
-
 void analyze_node(node* root, node* parent, scope* curr_scope) {
     if (!root) return;
     
@@ -1178,6 +1232,23 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
                 current_function = previous_function;
             }
         }
+        return;
+    }
+
+    if (root->token && strcmp(root->token, "index") == 0) {
+        printf("Found string indexing operation\n");
+        // Check the string variable
+        if (root->left) {
+            node* var_node = root->left;
+            handle_variable_usage(var_node, curr_scope);
+        }
+        
+        // Check the index expression
+        if (root->right) {
+            analyze_node(root->right, root, curr_scope);
+        }
+        
+        // We return early to avoid the general recursion at the end
         return;
     }
     
