@@ -1,26 +1,28 @@
 #include "semantic_analysis.h"
+#include <stdarg.h>
 
-// We need to define the node structure to access AST
+// Node structure to access AST
 typedef struct node {
     char *token;
     struct node *left;
     struct node *right;
 } node;
 
-// Define our variable structure
+// Variable structure
 typedef struct var {
     char* name;
     int type;  // We'll use integers for types: 1=int, 2=string, 3=bool, 4=float
     struct var* next;
 } var;
 
-// Define the scope structure
+// Scope structure
 typedef struct scope {
     var* variables;
     struct scope* parent;
     char* scope_name;  // For debugging
 } scope;
 
+// Function information structure
 typedef struct function_info {
     char* name;
     int param_count;
@@ -31,13 +33,71 @@ typedef struct function_info {
     struct function_info* next;
 } function_info;
 
-// Update the global variable declaration
+// Debug level flag: 0 = errors only, 1 = basic info, 2 = verbose debug
+int debug_level = 1;  // Default: show basic info, but not detailed debug
+
+// Simple logging function with debug level control
+void log_debug(const char* message) {
+    if (debug_level >= 2) {
+        printf("DEBUG: %s\n", message);
+    }
+}
+
+void log_info(const char* message) {
+    if (debug_level >= 1) {
+        printf("INFO: %s\n", message);
+    }
+}
+
+void log_error(const char* message) {
+    // Errors are always shown
+    printf("ERROR: %s\n", message);
+    semantic_errors++;
+}
+
+// Helper functions for formatted messages
+void log_debug_format(const char* format, ...) {
+    if (debug_level >= 2) {
+        char buffer[512];
+        va_list args;
+        va_start(args, format);
+        vsprintf(buffer, format, args);
+        va_end(args);
+        printf("DEBUG: %s\n", buffer);
+    }
+}
+
+void log_info_format(const char* format, ...) {
+    if (debug_level >= 1) {
+        char buffer[512];
+        va_list args;
+        va_start(args, format);
+        vsprintf(buffer, format, args);
+        va_end(args);
+        printf("INFO: %s\n", buffer);
+    }
+}
+
+void log_error_format(const char* format, ...) {
+    char buffer[512];
+    va_list args;
+    va_start(args, format);
+    vsprintf(buffer, format, args);
+    va_end(args);
+    printf("ERROR: %s\n", buffer);
+    semantic_errors++;
+}
+
+// Global variable to track declared functions
 function_info* declared_functions = NULL;
 // Global variable to track current function context for return type validation
 function_info* current_function = NULL;
+// Global variable to track semantic errors
+int semantic_errors = 0;
 
 int get_expression_type(node* expr_node, scope* curr_scope);
 int check_index_operation(node* node, scope* current_scope);
+char* get_type_name(int type);
 
 // Helper function to create a new function_info
 function_info* create_function_info(char* name, int return_type) {
@@ -52,7 +112,7 @@ function_info* create_function_info(char* name, int return_type) {
     return new_func;
 }
 
-// Updated function to find a function by name
+// Helper function to find a function by name in the global list
 function_info* find_function_by_name(char* func_name) {
     function_info* current = declared_functions;
     while (current) {
@@ -63,9 +123,6 @@ function_info* find_function_by_name(char* func_name) {
     }
     return NULL;
 }
-
-// Global variable to track semantic errors
-int semantic_errors = 0;
 
 // Type constants
 #define TYPE_INT 1
@@ -110,19 +167,18 @@ void add_variable(scope* curr_scope, char* name, int type) {
     new_var->next = curr_scope->variables;
     curr_scope->variables = new_var;
     
-    printf("  Added variable '%s' of type '%s' to scope %s\n", 
-           name, get_type_name(type), 
-           curr_scope->scope_name ? curr_scope->scope_name : "global");
+    log_debug_format("Added variable '%s' of type '%s' to scope %s", 
+                   name, get_type_name(type), 
+                   curr_scope->scope_name ? curr_scope->scope_name : "global");
 }
 
-// Updated function to add a function declaration with return type
+// Helper function to add a function declaration
 function_info* add_function_declaration(char* func_name, int return_type) {
     // Check if function already exists
     function_info* current = declared_functions;
     while (current) {
         if (strcmp(current->name, func_name) == 0) {
-            printf("  Semantic Error: Function '%s' already declared\n", func_name);
-            semantic_errors++;
+            log_error_format("Function '%s' already declared", func_name);
             return NULL;
         }
         current = current->next;
@@ -132,11 +188,12 @@ function_info* add_function_declaration(char* func_name, int return_type) {
     function_info* new_func = create_function_info(func_name, return_type);
     declared_functions = new_func;
     
-    printf("  Function '%s' declared successfully", func_name);
     if (return_type != 0) {
-        printf(" (return type: %s)", get_type_name(return_type));
+        log_info_format("Function '%s' declared successfully (return type: %s)", 
+                      func_name, get_type_name(return_type));
+    } else {
+        log_info_format("Function '%s' declared successfully", func_name);
     }
-    printf("\n");
     
     return new_func;
 }
@@ -145,7 +202,6 @@ function_info* add_function_declaration(char* func_name, int return_type) {
 void add_parameter_to_function(function_info* func, char* param_name, int param_type, int has_default_value) {
     func->param_count++;
     
-    // Reallocate arrays to accommodate new parameter
     func->param_types = (int*)realloc(func->param_types, func->param_count * sizeof(int));
     func->param_names = (char**)realloc(func->param_names, func->param_count * sizeof(char*));
     func->has_default = (int*)realloc(func->has_default, func->param_count * sizeof(int));
@@ -155,34 +211,33 @@ void add_parameter_to_function(function_info* func, char* param_name, int param_
     func->param_types[index] = param_type;
     func->param_names[index] = strdup(param_name);
     func->has_default[index] = has_default_value;
-    
-    printf("  Added parameter '%s' (type: %s, has_default: %s) to function '%s'\n",
-           param_name, get_type_name(param_type), 
-           has_default_value ? "yes" : "no", func->name);
 }
 
 // Count the number of arguments in a function call
 int count_function_arguments(node* args_node) {
     if (!args_node) return 0;
     
-    // Special case: If this is a direct argument (not a comma-separated list)
-    // Examples include: a single variable, a single literal, or a complex expression
-    if (strcmp(args_node->token, "") != 0) {
+    // If this is a direct argument (not a comma-separated list)
+    if (args_node->token && strcmp(args_node->token, "") != 0) {
         return 1;  // This is a single argument
     }
     
-    // For a comma-separated list, count the arguments
+    // For a comma-separated list, count them 
     int count = 0;
-    node* current = args_node;
+    node* curr = args_node;
     
-    while (current) {
-        // Left child is an argument
-        if (current->left) {
+    // The first level has the first argument and a continuation on the right
+    if (curr->left) count++;
+    
+    curr = curr->right;
+    while (curr) {
+        if (curr->token && strcmp(curr->token, "") != 0) {
+            count++;
+            break;
+        } else if (curr->left) {
             count++;
         }
-        
-        // Move to next argument in the list
-        current = current->right;
+        curr = curr->right;
     }
     
     return count;
@@ -196,7 +251,7 @@ node** extract_function_arguments(node* args_node, int* arg_count) {
         return NULL;
     }
     
-    // First, count the arguments
+    // Count the arguments
     *arg_count = count_function_arguments(args_node);
     
     if (*arg_count == 0) {
@@ -205,28 +260,37 @@ node** extract_function_arguments(node* args_node, int* arg_count) {
     
     // Allocate array to hold argument nodes
     node** arg_nodes = (node**)malloc(*arg_count * sizeof(node*));
+    int index = 0;
     
-    // Special case: If this is a direct argument (not a comma-separated list)
-    if (strcmp(args_node->token, "") != 0) {
+    // If this is a direct argument (not a comma-separated list)
+    if (args_node->token && strcmp(args_node->token, "") != 0) {
         arg_nodes[0] = args_node;
         return arg_nodes;
     }
     
     // For a comma-separated list, extract the arguments
-    int index = 0;
-    node* current = args_node;
+    node* curr = args_node;
     
-    while (current && index < *arg_count) {
-        if (current->left) {
-            arg_nodes[index++] = current->left;
+    // First argument is in left child of first node
+    if (curr->left) {
+        arg_nodes[index++] = curr->left;
+    }
+    
+    curr = curr->right;
+    while (curr && index < *arg_count) {
+        if (curr->token && strcmp(curr->token, "") != 0) {
+            arg_nodes[index++] = curr;
+            break;
+        } else if (curr->left) {
+            arg_nodes[index++] = curr->left;
         }
-        current = current->right;
+        curr = curr->right;
     }
     
     return arg_nodes;
 }
 
-// Fully inlined version without separate helper function
+// Helper function to validate the __main__ function
 void validate_main_function(node* func_node, scope* func_scope) {
     if (!func_node || !func_node->left || !func_node->left->token) {
         return;
@@ -237,19 +301,16 @@ void validate_main_function(node* func_node, scope* func_scope) {
         return;
     }
     
-    printf("Validating __main__ function requirements...\n");
-    
+    log_info("Validating __main__ function requirements...");
+        
     node* func_body = func_node->right;
     if (!func_body) return;
     
     int has_params = 0;
     int has_return_type = 0;
     
-    // Use a stack-based approach or simple iterative search
-    // We'll check all visible nodes in the immediate structure
-    
-    // Check direct children and their children
-    node* nodes_to_check[25] = {func_body, NULL}; // Simple array for BFS
+    // Check direct children and their children - BFS
+    node* nodes_to_check[25] = {func_body, NULL}; 
     int front = 0, rear = 1;
     
     while (front < rear && rear < 25) {
@@ -277,17 +338,15 @@ void validate_main_function(node* func_node, scope* func_scope) {
     }
     
     if (has_params) {
-        printf("  Semantic Error: __main__ function cannot have parameters\n");
-        semantic_errors++;
+        log_error("__main__ function cannot have parameters");
     } else {
-        printf("  __main__ parameters: ✓ (none)\n");
+        log_info("__main__ parameters: ✓ (none)");
     }
     
     if (has_return_type) {
-        printf("  Semantic Error: __main__ function cannot have a return type\n");
-        semantic_errors++;
+        log_error("__main__ function cannot have a return type");
     } else {
-        printf("  __main__ return type: ✓ (none)\n");
+        log_info("__main__ return type: ✓ (none)");
     }
 }
 
@@ -328,20 +387,20 @@ void handle_variable_usage(node* var_node, scope* curr_scope) {
     
     char* var_name = var_node->token;
     
+    log_debug_format("Found variable usage: %s", var_name);
+    
     // Check if variable exists in scope hierarchy
     var* found_var = find_variable_in_scope_hierarchy(curr_scope, var_name);
     
     if (!found_var) {
-        printf("  Semantic Error: Variable '%s' used before declaration\n", var_name);
-        semantic_errors++;
+        log_error_format("Variable '%s' used before declaration", var_name);
         return;
     }
     
-    // Variable found - could add type information here later
-    printf("  Variable '%s' used (type: %s)\n", var_name, get_type_name(found_var->type));
+    log_debug_format("Variable '%s' used (type: %s)", var_name, get_type_name(found_var->type));
 }
 
-// Enhanced function to detect string literals
+// Function to detect string literals
 int looks_like_string_literal(char* token) {
     if (!token) return 0;
     
@@ -376,38 +435,22 @@ int looks_like_string_literal(char* token) {
 }
 
 // Get the type of an expression node
-// Updated get_expression_type function with better operator handling
 int get_expression_type(node* expr_node, scope* curr_scope) {
     if (!expr_node || !expr_node->token) {
         return 0; // Unknown type
     }
     
-    printf("DEBUG get_expression_type: analyzing token='%s'\n", expr_node->token);
+    log_debug_format("get_expression_type: analyzing token='%s'", expr_node->token);
     
-    // Handle comparison operations - these result in boolean
-    if (strcmp(expr_node->token, "==") == 0 || strcmp(expr_node->token, "!=") == 0 ||
-        strcmp(expr_node->token, "<") == 0 || strcmp(expr_node->token, ">") == 0 ||
-        strcmp(expr_node->token, "<=") == 0 || strcmp(expr_node->token, ">=") == 0) {
-        printf("DEBUG: Detected comparison operator\n");
-        return TYPE_BOOL;
-    }
-    
-    // Handle logical operations - these result in boolean
-    if (strcmp(expr_node->token, "and") == 0 || strcmp(expr_node->token, "or") == 0 ||
-        strcmp(expr_node->token, "not") == 0) {
-        printf("DEBUG: Detected logical operator\n");
-        return TYPE_BOOL;
-    }
-
-    if (strcmp(expr_node->token, "index") == 0) {
-        printf("DEBUG: Detected string indexing operation\n");
-        return check_index_operation(expr_node, curr_scope);
-    }
-    
-    // Handle arithmetic operations
-    if (strcmp(expr_node->token, "+") == 0 || strcmp(expr_node->token, "-") == 0 ||
-        strcmp(expr_node->token, "*") == 0 || strcmp(expr_node->token, "/") == 0) {
-        printf("DEBUG: Detected arithmetic operator\n");
+    // Handle arithmetic operators
+    if (strcmp(expr_node->token, "+") == 0 || 
+        strcmp(expr_node->token, "-") == 0 ||
+        strcmp(expr_node->token, "*") == 0 || 
+        strcmp(expr_node->token, "/") == 0 ||
+        strcmp(expr_node->token, "%") == 0 ||
+        strcmp(expr_node->token, "**") == 0) {
+        
+        log_debug("Detected arithmetic operator");
         
         // Get types of operands
         int left_type = get_expression_type(expr_node->left, curr_scope);
@@ -419,45 +462,131 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
             return TYPE_STRING;  // Result of string concatenation is a string
         }
         
-        // Error check: Can't use strings with -, *, / operators
-        if ((strcmp(expr_node->token, "-") == 0 || 
-            strcmp(expr_node->token, "*") == 0 || 
-            strcmp(expr_node->token, "/") == 0) && 
-            (left_type == TYPE_STRING || right_type == TYPE_STRING)) {
-            printf("  Semantic Error: Cannot use string operands with '%s' operator\n", expr_node->token);
-            semantic_errors++;
-            return 0;  // Invalid type
+        // Type checking for arithmetic operators
+        if (left_type != TYPE_INT && left_type != TYPE_FLOAT) {
+            log_error_format("Left operand of '%s' must be numeric (int or float), got '%s'", 
+                           expr_node->token, get_type_name(left_type));
+            return 0; 
         }
         
-        // For numeric operations:
-        
-        // If either operand is float, result is float
-        if (left_type == TYPE_FLOAT || right_type == TYPE_FLOAT) {
-            return TYPE_FLOAT;
+        // Right operand must also be numeric
+        if (right_type != TYPE_INT && right_type != TYPE_FLOAT) {
+            log_error_format("Right operand of '%s' must be numeric (int or float), got '%s'", 
+                           expr_node->token, get_type_name(right_type));
+            return 0; 
         }
         
-        // If both are int, result is int
+        // Result is int if both operands are int, otherwise float
         if (left_type == TYPE_INT && right_type == TYPE_INT) {
             return TYPE_INT;
+        } else {
+            return TYPE_FLOAT;
+        }
+    }
+    
+    // Handle logical operators: and, or
+    if (strcmp(expr_node->token, "and") == 0 || strcmp(expr_node->token, "or") == 0) {
+        log_debug("Detected logical operator");
+        
+        int left_type = get_expression_type(expr_node->left, curr_scope);
+        int right_type = get_expression_type(expr_node->right, curr_scope);
+        
+        // Both operands must be boolean
+        if (left_type != TYPE_BOOL) {
+            log_error_format("Left operand of '%s' must be boolean, got '%s'", 
+                           expr_node->token, get_type_name(left_type));
+            return 0; 
         }
         
-        return TYPE_INT; // Default for arithmetic
+        if (right_type != TYPE_BOOL) {
+            log_error_format("Right operand of '%s' must be boolean, got '%s'", 
+                           expr_node->token, get_type_name(right_type));
+            return 0; 
+        }
+        
+        return TYPE_BOOL; // Result is boolean
+    }
+    
+    // Handle not operator
+    if (strcmp(expr_node->token, "not") == 0) {
+        log_debug("Detected 'not' operator");
+        
+        int operand_type = get_expression_type(expr_node->right, curr_scope);
+        
+        // Operand must be boolean
+        if (operand_type != TYPE_BOOL) {
+            log_error_format("Operand of 'not' must be boolean, got '%s'", 
+                           get_type_name(operand_type));
+            return 0; 
+        }
+        
+        return TYPE_BOOL; // Result is boolean
+    }
+    
+    // Handle comparison operators: <, >, <=, >=
+    if (strcmp(expr_node->token, "<") == 0 || 
+        strcmp(expr_node->token, ">") == 0 ||
+        strcmp(expr_node->token, "<=") == 0 || 
+        strcmp(expr_node->token, ">=") == 0) {
+        
+        log_debug("Detected comparison operator");
+        
+        int left_type = get_expression_type(expr_node->left, curr_scope);
+        int right_type = get_expression_type(expr_node->right, curr_scope);
+        
+        // Both operands must be numeric (int or float)
+        if (left_type != TYPE_INT && left_type != TYPE_FLOAT) {
+            log_error_format("Left operand of '%s' must be numeric (int or float), got '%s'", 
+                           expr_node->token, get_type_name(left_type));
+            return 0; 
+        }
+        
+        if (right_type != TYPE_INT && right_type != TYPE_FLOAT) {
+            log_error_format("Right operand of '%s' must be numeric (int or float), got '%s'", 
+                           expr_node->token, get_type_name(right_type));
+            return 0; 
+        }
+        
+        return TYPE_BOOL; // Result is always boolean
+    }
+    
+    // Handle equality operators: ==, !=
+    if (strcmp(expr_node->token, "==") == 0 || strcmp(expr_node->token, "!=") == 0) {
+        log_debug("Detected equality operator");
+        
+        int left_type = get_expression_type(expr_node->left, curr_scope);
+        int right_type = get_expression_type(expr_node->right, curr_scope);
+        
+        // Both operands must be of the same type
+        if (left_type != right_type) {
+            log_error_format("Operands of '%s' must be of the same type, got '%s' and '%s'", 
+                           expr_node->token, get_type_name(left_type), get_type_name(right_type));
+            return 0; 
+        }
+        
+        return TYPE_BOOL; // Result is always boolean
+    }
+    
+    // Handle string indexing
+    if (strcmp(expr_node->token, "index") == 0) {
+        log_debug("Detected string indexing operation");
+        return check_index_operation(expr_node, curr_scope);
     }
     
     // Check if it's a variable - look up its declared type
     var* found_var = find_variable_in_scope_hierarchy(curr_scope, expr_node->token);
     if (found_var) {
-        printf("DEBUG: Found variable '%s' with type %d\n", expr_node->token, found_var->type);
+        log_debug_format("Found variable '%s' with type %d", expr_node->token, found_var->type);
         return found_var->type;
     }
     
     // Check if it's a number literal
     if (expr_node->token[0] >= '0' && expr_node->token[0] <= '9') {
         if (strchr(expr_node->token, '.') != NULL) {
-            printf("DEBUG: Detected float literal\n");
+            log_debug("Detected float literal");
             return TYPE_FLOAT;
         } else {
-            printf("DEBUG: Detected int literal\n");
+            log_debug("Detected int literal");
             return TYPE_INT;
         }
     }
@@ -465,59 +594,74 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
     // Check if it's a boolean literal
     if (strcmp(expr_node->token, "True") == 0 || strcmp(expr_node->token, "False") == 0 ||
         strcmp(expr_node->token, "true") == 0 || strcmp(expr_node->token, "false") == 0) {
-        printf("DEBUG: Detected boolean literal\n");
+        log_debug("Detected boolean literal");
         return TYPE_BOOL;
     }
     
     // Check if it looks like a string literal
     if (looks_like_string_literal(expr_node->token)) {
-        printf("DEBUG: Detected string literal by pattern\n");
+        log_debug("Detected string literal by pattern");
         return TYPE_STRING;
     }
     
     // Function calls - for now return unknown type
     if (strcmp(expr_node->token, "call") == 0) {
-        // We'd need function signature tracking to determine return type
-        return 0; // Unknown
-    }
+        if (!expr_node->left || !expr_node->left->token) {
+            log_debug("Invalid function call in expression");
+            return 0;
+        }
+        
+        char* func_name = expr_node->left->token;
+        log_debug_format("Getting return type for function call: %s", func_name);
+        
+        // Find the function in our declared functions list
+        function_info* func_info = find_function_by_name(func_name);
+        if (!func_info) {
+            log_debug_format("Function '%s' not found, can't determine return type", func_name);
+            return 0;
+        }
+        
+        // Return the function's return type
+        log_debug_format("Function '%s' has return type: %s", 
+                    func_name, get_type_name(func_info->return_type));
+        return func_info->return_type;
+    }               
     
     // If we reach here, it's likely an undeclared variable or unknown operator
-    printf("DEBUG: Undeclared identifier - returning unknown type\n");
+    log_debug("Undeclared identifier - returning unknown type");
     return 0; // Return 0 to indicate we can't determine the type
 }
 
 // Helper function to validate that an expression is of boolean type
 void validate_condition_type(node* condition_node, scope* curr_scope, const char* context) {
     if (!condition_node) {
-        printf("  Semantic Error: Missing condition in %s\n", context);
-        semantic_errors++;
+        log_error_format("Missing condition in %s", context);
         return;
     }
+    
+    log_debug_format("Validating %s condition type", context);
     
     // Get the type of the condition expression
     int condition_type = get_expression_type(condition_node, curr_scope);
     
-    printf("  Validating %s condition type: got %s\n", context, get_type_name(condition_type));
-    
     if (condition_type == 0) {
-        printf("  Warning: Cannot determine type of condition in %s\n", context);
+        log_info_format("Cannot determine type of condition in %s", context);
         return;
     }
     
     if (condition_type != TYPE_BOOL) {
-        printf("  Semantic Error: %s condition must be boolean type\n", context);
-        printf("    Expected: bool, Got: %s\n", get_type_name(condition_type));
-        semantic_errors++;
+        log_error_format("%s condition must be boolean type. Expected: bool, Got: %s", 
+                        context, get_type_name(condition_type));
         return;
     }
     
-    printf("  %s condition type validated successfully (bool)\n", context);
+    log_info_format("%s condition type validated successfully (bool)", context);
 }
 
 // Handle string indexing operations
 int check_index_operation(node* node, scope* current_scope) {
     if (!node || strcmp(node->token, "index") != 0) {
-        printf("Internal error: check_index_operation called on non-index node\n");
+        log_error("Internal error: check_index_operation called on non-index node");
         return 0;
     }
     
@@ -526,15 +670,13 @@ int check_index_operation(node* node, scope* current_scope) {
     var* found_var = find_variable_in_scope_hierarchy(current_scope, var_name);
     
     if (!found_var) {
-        printf("  Semantic Error: Variable '%s' used in indexing operation before declaration\n", var_name);
-        semantic_errors++;
+        log_error_format("Variable '%s' used in indexing operation before declaration", var_name);
         return 0;
     }
     
     if (found_var->type != TYPE_STRING) {
-        printf("  Semantic Error: Index operator '[]' can only be used with string type, but '%s' is of type '%s'\n", 
-               var_name, get_type_name(found_var->type));
-        semantic_errors++;
+        log_error_format("Index operator '[]' can only be used with string type, but '%s' is of type '%s'", 
+                       var_name, get_type_name(found_var->type));
         return 0;
     }
     
@@ -542,39 +684,36 @@ int check_index_operation(node* node, scope* current_scope) {
     int index_type = get_expression_type(node->right, current_scope);
     
     if (index_type != TYPE_INT) {
-        printf("  Semantic Error: String index must be of integer type, got '%s'\n", get_type_name(index_type));
-        semantic_errors++;
+        log_error_format("String index must be of integer type, got '%s'", get_type_name(index_type));
         return 0;
     }
     
     // If both checks pass, the result is a string
-    printf("  String indexing operation validated successfully\n");
+    log_info("String indexing operation validated successfully");
     return TYPE_STRING;
 }
 
 // Handle return statement validation
 void handle_return_statement(node* return_node, scope* curr_scope) {
     if (!current_function) {
-        printf("  Semantic Error: Return statement outside of function\n");
-        semantic_errors++;
+        log_error("Return statement outside of function");
         return;
     }
-    
-    printf("Found return statement in function '%s'\n", current_function->name);
-    
+
+    log_info_format("Found return statement in function '%s'", current_function->name);
+
     // Check if function has a declared return type
     int expected_return_type = current_function->return_type;
     
     // If no return value is provided (return;)
     if (!return_node || !return_node->left) {
-        printf("  Return with no value\n");
+        log_debug("Return with no value");
         
         if (expected_return_type != 0) {
-            printf("  Semantic Error: Function '%s' declared with return type '%s' but returns no value\n", 
-                   current_function->name, get_type_name(expected_return_type));
-            semantic_errors++;
+            log_error_format("Function '%s' declared with return type '%s' but returns no value", 
+                           current_function->name, get_type_name(expected_return_type));
         } else {
-            printf("  Empty return validated successfully (no return type declared)\n");
+            log_debug("Empty return validated successfully (no return type declared)");
         }
         return;
     }
@@ -582,42 +721,37 @@ void handle_return_statement(node* return_node, scope* curr_scope) {
     // Get the type of the returned expression
     int actual_return_type = get_expression_type(return_node->left, curr_scope);
     
-    printf("  Validating return type: expected %s, got %s\n", 
-           get_type_name(expected_return_type),
-           get_type_name(actual_return_type));
+    log_debug_format("Validating return type: expected %s, got %s", 
+                   get_type_name(expected_return_type), get_type_name(actual_return_type));
     
     // Check if function is declared without return type
     if (expected_return_type == 0) {
-        printf("  Semantic Error: Function '%s' has no declared return type but returns a value\n", 
-               current_function->name);
-        semantic_errors++;
+        log_error_format("Function '%s' has no declared return type but returns a value", 
+                       current_function->name);
         return;
     }
     
     // Check if actual return type matches expected
     if (actual_return_type == 0) {
-        printf("  Warning: Cannot determine type of return expression in function '%s'\n", 
-               current_function->name);
+        log_info_format("Cannot determine type of return expression in function '%s'", 
+                      current_function->name);
         return;
     }
     
     if (actual_return_type != expected_return_type) {
-        printf("  Semantic Error: Return type mismatch in function '%s'\n", current_function->name);
-        printf("    Expected: %s, Got: %s\n", 
-               get_type_name(expected_return_type), 
-               get_type_name(actual_return_type));
-        semantic_errors++;
+        log_error_format("Return type mismatch in function '%s'. Expected: %s, Got: %s", 
+                       current_function->name, get_type_name(expected_return_type), 
+                       get_type_name(actual_return_type));
         return;
     }
     
-    printf("  Return statement validated successfully\n");
+    log_info("Return statement validated successfully");
 }
 
 // Handle assignment with type checking
 void handle_assignment(node* assign_node, scope* curr_scope) {
     if (!assign_node || !assign_node->left || !assign_node->right) {
-        printf("  Semantic Error: Invalid assignment node\n");
-        semantic_errors++;
+        log_error("Invalid assignment node");
         return;
     }
     
@@ -626,31 +760,26 @@ void handle_assignment(node* assign_node, scope* curr_scope) {
     // Check if variable is declared
     var* found_var = find_variable_in_scope_hierarchy(curr_scope, var_name);
     if (!found_var) {
-        printf("  Semantic Error: Cannot assign to undeclared variable '%s'\n", var_name);
-        semantic_errors++;
+        log_error_format("Cannot assign to undeclared variable '%s'", var_name);
         return;
     }
     
-    // Get the type of the expression being assigned
     int expr_type = get_expression_type(assign_node->right, curr_scope);
     
     if (expr_type == 0) {
-        printf("  Warning: Cannot determine type of expression for assignment to '%s'\n", var_name);
+        log_info_format("Cannot determine type of expression for assignment to '%s'", var_name);
         return;
     }
     
     // Check if types match
     if (found_var->type != expr_type) {
-        printf("  Semantic Error: Type mismatch in assignment to '%s'\n", var_name);
-        printf("    Expected: %s, Got: %s\n", 
-               get_type_name(found_var->type), 
-               get_type_name(expr_type));
-        semantic_errors++;
+        log_error_format("Type mismatch in assignment to '%s'. Expected: %s, Got: %s", 
+                       var_name, get_type_name(found_var->type), get_type_name(expr_type));
         return;
     }
     
-    printf("  Assignment to '%s' type-checked successfully (%s)\n", 
-           var_name, get_type_name(found_var->type));
+    log_debug_format("Assignment to '%s' type-checked successfully (%s)", 
+                   var_name, get_type_name(found_var->type));
 }
 
 // Handle a parameter - type is the token, param name needs to be found
@@ -658,18 +787,15 @@ void handle_parameter(node* param_node, scope* func_scope) {
     if (!param_node || !param_node->token) {
         return;
     }
-    
-    // Get parameter name - need to handle different structures
+
     char* param_name = NULL;
     
     if (param_node->left) {
         if (param_node->left->token && strlen(param_node->left->token) > 0) {
-            // Direct parameter name
             if (get_type(param_node->left->token) == 0) {
                 param_name = param_node->left->token;
             }
         } else if (!param_node->left->token || strlen(param_node->left->token) == 0) {
-            // Empty node - parameter name might be deeper
             if (param_node->left->left && param_node->left->left->token) {
                 param_name = param_node->left->left->token;
             }
@@ -677,75 +803,63 @@ void handle_parameter(node* param_node, scope* func_scope) {
     }
     
     if (!param_name) {
-        printf("  Warning: Parameter of type '%s' has no identifiable name\n", param_node->token);
+        log_error_format("Parameter of type '%s' has no identifiable name", param_node->token);
         return;
     }
     
-    printf("Found parameter: %s %s\n", param_node->token, param_name);
+    // Debug information about parameter processing
+    log_debug_format("Processing parameter '%s' of type '%s'", param_name, param_node->token);
     
-    // Get type integer from type string  
     int type = get_type(param_node->token);
     if (type == 0) {
-        printf("  Semantic Error: Unknown parameter type '%s'\n", param_node->token);
-        semantic_errors++;
+        log_error_format("Unknown parameter type '%s'", param_node->token);
         return;
     }
     
     // Check if parameter already exists in current scope
     if (find_variable_in_scope(func_scope, param_name)) {
-        printf("  Semantic Error: Parameter '%s' already declared\n", param_name);
-        semantic_errors++;
+        log_error_format("Parameter '%s' already declared", param_name);
         return;
     }
     
     // Add parameter to scope
     add_variable(func_scope, param_name, type);
+    log_info_format("Added parameter '%s' of type '%s'", param_name, get_type_name(type));
 }
 
 // Handle a declaration - add to symbol table with error checking
 void handle_declaration(node* declare_node, scope* curr_scope) {
     if (!declare_node || !declare_node->left || !declare_node->right) {
-        printf("  Semantic Error: Invalid declaration node\n");
-        semantic_errors++;
+        log_error("Invalid declaration node");
         return;
     }
     
     char* type_str = declare_node->left->token;
     char* var_name = declare_node->right->token;
     
-    // Get type integer from type string
+    log_debug_format("Processing declaration: %s %s", type_str, var_name);
+    
     int type = get_type(type_str);
     if (type == 0) {
-        printf("  Semantic Error: Unknown type '%s'\n", type_str);
-        semantic_errors++;
+        log_error_format("Unknown type '%s'", type_str);
         return;
     }
     
-    // Check if variable already exists in current scope
     if (find_variable_in_scope(curr_scope, var_name)) {
-        printf("  Semantic Error: Variable '%s' already declared in this scope\n", var_name);
-        semantic_errors++;
+        log_error_format("Variable '%s' already declared in this scope", var_name);
         return;
     }
     
-    // Add variable to scope
     add_variable(curr_scope, var_name, type);
+    log_debug_format("Variable '%s' of type '%s' added to scope", var_name, get_type_name(type));
 }
 
 // Handle if-statement validation
 void handle_if_statement(node* if_node, scope* curr_scope) {
     if (!if_node) return;
-    
-    printf("Found if statement\n");
-    
-    // The structure of if-node varies, but typically:
-    // if_node->left is the condition
-    // if_node->right is the body (or next part of if-elif-else chain)
-    
-    // Find the condition node
+
     node* condition = if_node->left;
     
-    // Validate the condition type
     validate_condition_type(condition, curr_scope, "if-statement");
 }
 
@@ -753,16 +867,8 @@ void handle_if_statement(node* if_node, scope* curr_scope) {
 void handle_while_statement(node* while_node, scope* curr_scope) {
     if (!while_node) return;
     
-    printf("Found while statement\n");
-    
-    // The structure of while-node:
-    // while_node->left is the condition
-    // while_node->right is the body
-    
-    // Find the condition node
     node* condition = while_node->left;
     
-    // Validate the condition type
     validate_condition_type(condition, curr_scope, "while-loop");
 }
 
@@ -770,58 +876,29 @@ void handle_while_statement(node* while_node, scope* curr_scope) {
 void process_params(node* node, scope* func_scope) {
     if (!node) return;
     
-    // Check if this is a parameter (type followed by identifier)
     if (node->token && get_type(node->token) != 0) {
         handle_parameter(node, func_scope);
     }
     
-    // Recursively process children
     process_params(node->left, func_scope);
     process_params(node->right, func_scope);
 }
 
-// Debug function
-void debug_print_node(node* n, char* context) {
-    if (!n) {
-        printf("DEBUG %s: node is NULL\n", context);
-        return;
-    }
-    printf("DEBUG %s: token='%s', left=%p, right=%p\n", 
-           context, n->token ? n->token : "NULL", n->left, n->right);
-    if (n->left) {
-        printf("  left token: '%s'\n", n->left->token ? n->left->token : "NULL");
-    }
-    if (n->right) {
-        printf("  right token: '%s'\n", n->right->token ? n->right->token : "NULL");
-    }
-}
-
-// Updated is_variable_usage function to handle operators correctly
+// Function to handle operators correctly
 int is_variable_usage(node* var_node, node* parent_node) {
-    printf("DEBUG: Checking is_variable_usage for token='%s', parent='%s'\n",
-           var_node ? (var_node->token ? var_node->token : "NULL") : "NULL",
-           parent_node ? (parent_node->token ? parent_node->token : "NULL") : "NULL");
-    
     if (!var_node || !var_node->token) {
-        printf("DEBUG: Rejected - NULL node or token\n");
         return 0;
     }
     
-    // Skip empty tokens
     if (strlen(var_node->token) == 0) {
-        printf("DEBUG: Rejected - empty token\n");
         return 0;
     }
     
-    // Skip if this looks like a string literal
     if (looks_like_string_literal(var_node->token)) {
-        printf("DEBUG: Rejected - looks like string literal\n");
         return 0;
     }
     
-    // Skip if this is a type name
     if (get_type(var_node->token) != 0) {
-        printf("DEBUG: Rejected - is a type name\n");
         return 0;
     }
     
@@ -837,7 +914,6 @@ int is_variable_usage(node* var_node, node* parent_node) {
         strcmp(var_node->token, "while") == 0 ||
         strcmp(var_node->token, "index") == 0 ||
         strcmp(var_node->token, "return") == 0) {
-        printf("DEBUG: Rejected - is a keyword/operator\n");
         return 0;
     }
     
@@ -856,79 +932,63 @@ int is_variable_usage(node* var_node, node* parent_node) {
         strcmp(var_node->token, "and") == 0 ||
         strcmp(var_node->token, "or") == 0 ||
         strcmp(var_node->token, "not") == 0) {
-        printf("DEBUG: Rejected - is an operator\n");
         return 0;
     }
     
-    // Skip numbers
     if (var_node->token[0] >= '0' && var_node->token[0] <= '9') {
-        printf("DEBUG: Rejected - is a number\n");
         return 0;
     }
     
-    // Skip boolean literals
     if (strcmp(var_node->token, "True") == 0 ||
         strcmp(var_node->token, "False") == 0 ||
         strcmp(var_node->token, "true") == 0 ||
         strcmp(var_node->token, "false") == 0) {
-        printf("DEBUG: Rejected - boolean literal\n");
         return 0;
     }
     
     // Check all the skip conditions
     if (parent_node && parent_node->token) {
         if (strcmp(parent_node->token, "function") == 0) {
-            printf("DEBUG: Rejected - function name\n");
             return 0;
         }
         if (strcmp(parent_node->token, "declare") == 0) {
-            printf("DEBUG: Rejected - part of declaration\n");
             return 0;
         }
         if (strcmp(parent_node->token, "assign") == 0 && parent_node->left == var_node) {
-            printf("DEBUG: Rejected - left side of assignment\n");
             return 0;
         }
         if (strcmp(parent_node->token, "call") == 0 && parent_node->left == var_node) {
-            printf("DEBUG: Rejected - function name in call\n");
             return 0;
         }
     }
-    
-    printf("DEBUG: ACCEPTED as variable usage!\n");
     return 1;
 }
 
-// Updated is_function_declared to use new structure
+// Check if a function has been declared
 int is_function_declared(char* func_name) {
     return find_function_by_name(func_name) != NULL;
 }
 
-// Fixed handle_initialization - no recursive analyze_node call
+// Handle initialization of variables
 void handle_initialization(node* init_node, scope* curr_scope) {
-    printf("=== DEBUG: Entering handle_initialization ===\n");
-    debug_print_node(init_node, "init_node");
-    
     if (!init_node || !init_node->left || !init_node->right) {
-        printf("  Semantic Error: Invalid initialization node\n");
-        semantic_errors++;
+        log_error("Invalid initialization node");
         return;
     }
     
-    printf("DEBUG: About to handle declaration...\n");
+    log_debug_format("=== DEBUG: Entering handle_initialization ===");
+    
     // First handle the declaration part
     handle_declaration(init_node->left, curr_scope);
     
-    printf("DEBUG: Declaration handled, now checking initialization expression...\n");
-    debug_print_node(init_node->right, "init_expression");
+    log_debug("Declaration handled, now checking initialization expression...");
     
     // IMPORTANT: Check if the right side is a variable usage
-    // Don't call analyze_node recursively - just check this specific node
     if (is_variable_usage(init_node->right, init_node)) {
-        printf("DEBUG: Right side is a variable usage, checking...\n");
+        log_debug("Right side is a variable usage, checking...");
         handle_variable_usage(init_node->right, curr_scope);
     } else {
-        printf("DEBUG: Right side is not a variable usage\n");
+        log_debug("Right side is not a variable usage");
     }
     
     // Then check type compatibility
@@ -941,55 +1001,49 @@ void handle_initialization(node* init_node, scope* curr_scope) {
     char* type_str = declare_node->left->token;
     int expected_type = get_type(type_str);
     
-    printf("DEBUG: Getting type of expression '%s'...\n", 
-           init_node->right->token ? init_node->right->token : "NULL");
+    log_debug_format("Getting type of initialization expression...");
     
     // Get the type of the initialization expression
     int expr_type = get_expression_type(init_node->right, curr_scope);
     
-    printf("DEBUG: Expression type = %d (%s), Expected type = %d (%s)\n",
-           expr_type, get_type_name(expr_type), 
-           expected_type, get_type_name(expected_type));
+    log_debug_format("Expression type = %d (%s), Expected type = %d (%s)",
+                   expr_type, get_type_name(expr_type), 
+                   expected_type, get_type_name(expected_type));
     
     // If we can't determine the type (likely due to undeclared variable),
     // we've already reported the usage error, so skip type checking
     if (expr_type == 0) {
-        printf("  Type checking skipped due to undeclared identifier\n");
+        log_debug("Type checking skipped due to undetermined expression type");
         return;
     }
     
     // Check if types match
     if (expected_type != expr_type) {
-        printf("  Semantic Error: Type mismatch in initialization of '%s'\n", var_name);
-        printf("    Expected: %s, Got: %s\n", 
-               get_type_name(expected_type), 
-               get_type_name(expr_type));
-        semantic_errors++;
+        log_error_format("Type mismatch in initialization of '%s'. Expected: %s, Got: %s", 
+                       var_name, get_type_name(expected_type), get_type_name(expr_type));
         return;
     }
     
-    printf("  Initialization of '%s' type-checked successfully (%s)\n", 
-           var_name, get_type_name(expected_type));
-    printf("=== DEBUG: Exiting handle_initialization ===\n");
+    log_info_format("Initialization of '%s' type-checked successfully (%s)", 
+                  var_name, get_type_name(expected_type));
+    
+    log_debug_format("=== DEBUG: Exiting handle_initialization ===");
 }
 
-// Enhanced handle_function_call with argument count and type validation
+// Handle function call validation
 void handle_function_call(node* call_node, scope* curr_scope) {
     if (!call_node || !call_node->left || !call_node->left->token) {
-        printf("  Semantic Error: Invalid function call node\n");
-        semantic_errors++;
+        log_error("Invalid function call node");
         return;
     }
     
     char* func_name = call_node->left->token;
-    
-    printf("Found function call: %s\n", func_name);
+    log_info_format("Found function call: %s", func_name);
     
     // Check if function has been declared
     function_info* func_info = find_function_by_name(func_name);
     if (!func_info) {
-        printf("  Semantic Error: Function '%s' called before declaration\n", func_name);
-        semantic_errors++;
+        log_error_format("Function '%s' called before declaration", func_name);
         return;
     }
     
@@ -1009,29 +1063,26 @@ void handle_function_call(node* call_node, scope* curr_scope) {
         }
     }
     
-    // Validate argument count
-    printf("  Validating argument count: passed=%d, required=%d-%d\n", 
-           args_passed, min_required_args, total_params);
+    log_debug_format("Validating argument count: passed=%d, required=%d-%d", 
+                   args_passed, min_required_args, total_params);
     
     if (args_passed < min_required_args) {
-        printf("  Semantic Error: Too few arguments for function '%s'\n", func_name);
-        printf("    Expected at least %d arguments, got %d\n", min_required_args, args_passed);
-        semantic_errors++;
+        log_error_format("Too few arguments for function '%s'. Expected at least %d, got %d", 
+                        func_name, min_required_args, args_passed);
         return;
     }
     
     if (args_passed > total_params) {
-        printf("  Semantic Error: Too many arguments for function '%s'\n", func_name);
-        printf("    Expected at most %d arguments, got %d\n", total_params, args_passed);
-        semantic_errors++;
+        log_error_format("Too many arguments for function '%s'. Expected at most %d, got %d", 
+                        func_name, total_params, args_passed);
         return;
     }
     
-    printf("  Function call '%s' argument count validated successfully\n", func_name);
+    log_info_format("Function call '%s' argument count validated successfully", func_name);
     
-    // NEW: Validate argument types
+    // Validate argument types
     if (args_passed > 0 && call_node->right) {
-        printf("  Validating argument types...\n");
+        log_debug("Validating argument types...");
         
         // Extract argument nodes
         int arg_count;
@@ -1043,21 +1094,15 @@ void handle_function_call(node* call_node, scope* curr_scope) {
                 int arg_type = get_expression_type(arg_nodes[i], curr_scope);
                 int expected_type = func_info->param_types[i];
                 
-                printf("    Arg %d: expected %s, got %s\n", 
-                       i + 1, 
-                       get_type_name(expected_type),
-                       get_type_name(arg_type));
+                log_debug_format("Arg %d: expected %s, got %s", 
+                               i + 1, get_type_name(expected_type), get_type_name(arg_type));
                 
                 if (arg_type == 0) {
-                    printf("  Warning: Cannot determine type of argument %d for function '%s'\n", 
-                           i + 1, func_name);
+                    log_info_format("Cannot determine type of argument %d for function '%s'", 
+                                  i + 1, func_name);
                 } else if (arg_type != expected_type) {
-                    printf("  Semantic Error: Type mismatch for argument %d in function '%s'\n", 
-                           i + 1, func_name);
-                    printf("    Expected: %s, Got: %s\n", 
-                           get_type_name(expected_type), 
-                           get_type_name(arg_type));
-                    semantic_errors++;
+                    log_error_format("Type mismatch for argument %d in function '%s'. Expected: %s, Got: %s", 
+                                   i + 1, func_name, get_type_name(expected_type), get_type_name(arg_type));
                 }
             }
         }
@@ -1067,7 +1112,7 @@ void handle_function_call(node* call_node, scope* curr_scope) {
             free(arg_nodes);
         }
         
-        printf("  Argument type validation completed\n");
+        log_debug("Argument type validation completed");
     }
 }
 
@@ -1078,8 +1123,7 @@ int extract_return_type(node* func_node) {
     // Navigate the AST structure to find return_type node
     node* current = func_node->right;
     
-    // The structure varies, so we need to search for "return_type" token
-    // Use a simple BFS approach
+    // Using a simple BFS approach to traverse the AST and find the return_type
     node* nodes_to_check[50] = {current};
     int front = 0, rear = 1;
     
@@ -1094,7 +1138,6 @@ int extract_return_type(node* func_node) {
             }
         }
         
-        // Add children to queue
         if (check_node->left && rear < 50) {
             nodes_to_check[rear++] = check_node->left;
         }
@@ -1106,7 +1149,7 @@ int extract_return_type(node* func_node) {
     return 0; // No return type found
 }
 
-// Enhanced process_params_for_function with default value type checking
+// Helper function to process parameters for a function
 void process_params_for_function(node* param_node, function_info* func_info, scope* func_scope) {
     if (!param_node || !func_info) return;
     
@@ -1142,49 +1185,46 @@ void process_params_for_function(node* param_node, function_info* func_info, sco
         if (param_name) {
             int param_type = get_type(param_node->token);
             
-            // Add to function info
+            log_info_format("Found parameter: %s %s", param_node->token, param_name);
             add_parameter_to_function(func_info, param_name, param_type, has_default_value);
             
-            // NEW: Check default value type if it exists
+            // Check default value type if it exists
             if (has_default_value && default_value_node) {
-                printf("  Checking default value for parameter '%s'...\n", param_name);
-                
+                log_debug_format("Checking default value for parameter '%s'...", param_name);
+
                 // Get the type of the default value
                 int default_type = get_expression_type(default_value_node, func_scope);
                 
                 if (default_type == 0) {
-                    printf("    Warning: Cannot determine type of default value for '%s'\n", param_name);
+                    log_info_format("Cannot determine type of default value for '%s'", param_name);
                 } else if (default_type != param_type) {
-                    printf("  Semantic Error: Default value type mismatch for parameter '%s'\n", param_name);
-                    printf("    Parameter type: %s, Default value type: %s\n", 
-                           get_type_name(param_type), get_type_name(default_type));
-                    semantic_errors++;
+                    log_error_format("Default value type mismatch for parameter '%s'. Parameter type: %s, Default value type: %s", 
+                                   param_name, get_type_name(param_type), get_type_name(default_type));
                 } else {
-                    printf("    Default value type OK: %s\n", get_type_name(default_type));
+                    log_debug_format("Default value type OK: %s", get_type_name(default_type));
                 }
             }
         }
     }
     
-    // Recursively process children
     process_params_for_function(param_node->left, func_info, func_scope);
     process_params_for_function(param_node->right, func_info, func_scope);
 }
 
-// Updated analyze_node function with return handling and current function tracking
+// Function to analyze the AST and perform semantic checks
 void analyze_node(node* root, node* parent, scope* curr_scope) {
     if (!root) return;
-    
-    printf("DEBUG: analyze_node called with token='%s'\n", 
-           root->token ? root->token : "NULL");
-    
-    // Updated function handling in analyze_node
+
+    log_debug_format("analyze_node called with token='%s'", 
+                    root->token ? root->token : "NULL");
+   
+    // Check if this is a function declaration
     if (root->token && strcmp(root->token, "function") == 0) {
         scope* func_scope = mkscope(curr_scope);
         
         if (root->left && root->left->token) {
             func_scope->scope_name = strdup(root->left->token);
-            printf("Entering function scope: %s\n", func_scope->scope_name);
+            log_info_format("Entering function scope: %s", func_scope->scope_name);
             
             // Extract return type from AST
             int return_type = extract_return_type(root);
@@ -1197,10 +1237,8 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
                 function_info* previous_function = current_function;
                 current_function = func_info;
                 
-                // Validate __main__ function requirements
                 validate_main_function(root, func_scope);
                 
-                // Find and process parameters with enhanced function info tracking
                 node* current = root->right;
                 node* nodes_to_check[50] = {current};
                 int front = 0, rear = 1;
@@ -1210,12 +1248,11 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
                     if (!check_node) continue;
                     
                     if (check_node->token && strcmp(check_node->token, "params") == 0) {
-                        printf("Processing parameters...\n");
+                        log_info("Processing parameters...");
                         process_params_for_function(check_node, func_info, func_scope);
                         break; // We found and processed params, no need to continue
                     }
                     
-                    // Add children to queue
                     if (check_node->left && rear < 50) {
                         nodes_to_check[rear++] = check_node->left;
                     }
@@ -1224,7 +1261,6 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
                     }
                 }
                 
-                // Analyze function body with current function context
                 analyze_node(root->left, root, func_scope);
                 analyze_node(root->right, root, func_scope);
                 
@@ -1235,8 +1271,9 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
         return;
     }
 
+    // Check if this is a string indexing operation
     if (root->token && strcmp(root->token, "index") == 0) {
-        printf("Found string indexing operation\n");
+        log_info("Found string indexing operation");
         // Check the string variable
         if (root->left) {
             node* var_node = root->left;
@@ -1246,75 +1283,61 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
         // Check the index expression
         if (root->right) {
             analyze_node(root->right, root, curr_scope);
-        }
-        
-        // We return early to avoid the general recursion at the end
+        }        
         return;
     }
     
     // Check if this is an if statement
     if (root->token && strcmp(root->token, "if") == 0) {
         handle_if_statement(root, curr_scope);
-        // Continue with normal traversal to check the condition and body
     }
 
     // Check if this is a while statement
     if (root->token && strcmp(root->token, "while") == 0) {
         handle_while_statement(root, curr_scope);
-        // Continue with normal traversal to check the condition and body
     }
 
-    // Also handle if-else, if-elif, if-elif-else variants
     if (root->token && (strcmp(root->token, "if-else") == 0 || 
                         strcmp(root->token, "if-elif") == 0 || 
                         strcmp(root->token, "if-elif-else") == 0)) {
-        // For these complex if statements, we need to find the condition
-        // The structure might be nested, but the condition is usually in the first if node
-        node* if_part = root->left;  // This should be the if node
+        node* if_part = root->left;  
         if (if_part && strcmp(if_part->token, "if") == 0) {
             handle_if_statement(if_part, curr_scope);
         }
-        // Continue with normal traversal
     }       
 
     // Check if this is a return statement
     if (root->token && strcmp(root->token, "return") == 0) {
         handle_return_statement(root, curr_scope);
-        // Continue with normal traversal to validate the return expression
     }
    
     // Check if this is a params node
     if (root->token && strcmp(root->token, "params") == 0) {
-        printf("Processing parameters...\n");
         process_params(root, curr_scope);
         return;
     }
-    
+
     // Check if this is an initialization node
     if (root->token && strcmp(root->token, "init") == 0) {
-        printf("Found initialization: ");
         if (root->left && root->left->right && root->left->right->token) {
-            printf("%s\n", root->left->right->token);
+            log_info_format("Found initialization: %s", root->left->right->token);
         }
         handle_initialization(root, curr_scope);
-        // Don't continue with normal traversal - init is fully handled
         return;
     }
-    
+
     // Check if this is a declaration node (standalone, not part of init)
     if (root->token && strcmp(root->token, "declare") == 0) {
-        printf("Found declaration: ");
         if (root->left && root->right && root->left->token && root->right->token) {
-            printf("%s %s\n", root->left->token, root->right->token);
+            log_info_format("Found declaration: %s %s", root->left->token, root->right->token);
             handle_declaration(root, curr_scope);
         }
     }
     
     // Check if this is an assignment node
     if (root->token && strcmp(root->token, "assign") == 0) {
-        printf("Found assignment to: ");
         if (root->left && root->left->token) {
-            printf("%s\n", root->left->token);
+            log_info_format("Found assignment: %s", root->left->token);
             handle_assignment(root, curr_scope);
         }
     }
@@ -1322,57 +1345,32 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
     // Check if this is a function call
     if (root->token && strcmp(root->token, "call") == 0) {
         handle_function_call(root, curr_scope);
-        // Continue with normal traversal to check arguments
     }
     
     // Check if this is a variable usage
     if (is_variable_usage(root, parent)) {
-        printf("DEBUG: Found variable usage: %s\n", root->token);
         handle_variable_usage(root, curr_scope);
     }
     
-    // Recursively check children with parent context
     analyze_node(root->left, root, curr_scope);
     analyze_node(root->right, root, curr_scope);
 }
 
-// Temporary debug function to print all collected function info
-void debug_print_functions() {
-    printf("\n=== DEBUG: All collected functions ===\n");
-    function_info* current = declared_functions;
-    int count = 0;
-    
-    while (current) {
-        count++;
-        printf("Function %d: %s\n", count, current->name);
-        printf("  Return type: %s\n", get_type_name(current->return_type));
-        printf("  Parameter count: %d\n", current->param_count);
-        
-        for (int i = 0; i < current->param_count; i++) {
-            printf("    Param %d: %s %s", i+1, 
-                   get_type_name(current->param_types[i]),
-                   current->param_names[i]);
-            if (current->has_default[i]) {
-                printf(" (has default)");
-            }
-            printf("\n");
-        }
-        printf("\n");
-        current = current->next;
-    }
-    printf("=== End debug ===\n\n");
-}
-
-// Main semantic analysis function - no more duplicate messages!
+// Main function for semantic analysis
 void semantic_analysis(struct node* root, scope* curr_scope) {
     // Cast the struct node* to our node* type
     node* ast_root = (node*)root;
 
+    log_info("=== Starting semantic analysis ===");
     // Initialize function tracking list
     declared_functions = NULL;
     
     // Analyze the entire AST
     analyze_node(ast_root, NULL, curr_scope);
 
-    debug_print_functions();
+    if (semantic_errors == 0) {
+        log_info("=== Semantic analysis completed successfully ===");
+    } else {
+        log_error_format("=== Semantic analysis failed with %d error(s) ===", semantic_errors);
+    }
 }

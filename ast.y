@@ -47,16 +47,9 @@ s: program {
       printf("\n");
       
       // Perform semantic analysis
-      printf("=== Starting semantic analysis ===\n");
       global_scope = mkscope(NULL);
       semantic_analysis($1, global_scope);
       
-      if (semantic_errors == 0) {
-        printf("=== Semantic analysis completed successfully ===\n");
-      } else {
-        printf("=== Semantic analysis failed with %d error(s) ===\n", semantic_errors);
-        return 1;  // Exit with error code
-      }
     } else if (main_function_found > 1) {
       printf("Error: Multiple '__main__' functions found.\n");
       return 1;
