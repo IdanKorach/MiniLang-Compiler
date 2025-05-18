@@ -370,6 +370,7 @@ var* find_variable_in_scope(scope* curr_scope, char* name) {
     return NULL;
 }
 
+// Uncomment log_debug_format lines to enable a more deep debug logging
 // Check if variable exists in current scope OR any parent scope (for usage check)
 var* find_variable_in_scope_hierarchy(scope* curr_scope, char* name) {
     // log_debug_format("Looking for variable '%s' in scope hierarchy", name);
@@ -643,12 +644,12 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
         // Find the function in our declared functions list
         function_info* func_info = find_function_by_name(func_name);
         if (!func_info) {
-            log_error_format("Function '%s' called before declaration", func_name); // Add this line
+            log_error_format("Function '%s' called before declaration", func_name); 
             log_debug_format("Function '%s' not found, can't determine return type", func_name);
             return 0;
         }
         
-        // Check if function was declared before current position (if using position tracking)
+        // Check if function was declared before current position
         if (func_info->declaration_position >= current_position) {
             log_error_format("Function '%s' called before declaration", func_name);
             return 0;
@@ -759,7 +760,7 @@ int check_index_operation(node* node, scope* current_scope) {
         return 0;
     }
     
-    // If both checks pass, the result is a string (a single character is still a string in this language)
+    // If both checks pass, the result is a string (a single character is still a string in our language)
     log_info("String indexing operation validated successfully");
     return TYPE_STRING;
 }
@@ -1167,7 +1168,7 @@ void handle_initialization(node* init_node, scope* curr_scope) {
     
     log_debug("Declaration handled, now checking initialization expression...");
     
-    // IMPORTANT: Check if the right side is a variable usage
+    // Check if the right side is a variable usage
     if (is_variable_usage(init_node->right, init_node)) {
         log_debug("Right side is a variable usage, checking...");
         handle_variable_usage(init_node->right, curr_scope);
@@ -1640,7 +1641,7 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
         }
     }       
 
-    // Check if this is a code block (often represented by a node with an empty token)
+    // Check if this is a code block 
     if (root->token && strcmp(root->token, "") == 0 && root->left && root->right) {
         // This might be a code block
         scope* block_scope = mkscope(curr_scope);
@@ -1719,7 +1720,7 @@ void semantic_analysis(struct node* root, scope* curr_scope) {
     analyze_node(ast_root, NULL, curr_scope);
 
     if (semantic_errors == 0) {
-        log_info("=== Semantic analysis completed successfully ===");
+        printf("=== Semantic analysis completed successfully ===");
     } else {
         log_error_format("=== Semantic analysis failed with %d error(s) ===", semantic_errors);
     }
