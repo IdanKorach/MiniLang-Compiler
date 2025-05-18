@@ -1,37 +1,57 @@
-def add_numbers(int a; int b) -> int: {
-    return a + b;
-}
-
-def concatenate(string s1; string s2) -> string: {
-    return s1 + s2;
-}
-
-def is_equal(int x; int y) -> bool: {
-    return x == y;
+def modulo_stress_test() -> int: {
+    int count = 0;
+    
+    # Test basic modulo operations
+    if (10 % 3 == 1): {
+        count = count + 1;
+    }
+    
+    if (20 % 7 == 6): {
+        count = count + 1;
+    }
+    
+    # Test modulo with variables
+    int a = 17;
+    int b = 5;
+    if (a % b == 2): {
+        count = count + 1;
+    }
+    
+    # Test modulo in complex expressions
+    if ((a + b) % 7 == 1): {
+        count = count + 1;
+    }
+    
+    # Test modulo with boolean expressions
+    bool test1 = 10 % 2 == 0;
+    bool test2 = 11 % 2 == 0;
+    
+    if (test1 and not test2): {
+        count = count + 1;
+    }
+    
+    # Test nesting with multiple modulos
+    if ((25 % 7) % 3 == 1): {
+        count = count + 1;
+    }
+    
+    # Test modulo in loops
+    int i = 0;
+    while (i < 10): {
+        if (i % 3 == 0): {
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+    
+    # Test modulo with different operators
+    if (15 % 4 == 3 and 16 % 4 == 0): {
+        count = count + 1;
+    }
+    
+    return count;
 }
 
 def __main__(): {
-    # Test variable declarations - checking log format
-    int x = 10;
-    float y = 3.14;
-    string message = "Hello";
-    bool flag = true;
-    
-    # Test function call return type tracking
-    int sum = add_numbers(5, 7);       # Function call -> int
-    string full = concatenate("Hello", " World");  # Function call -> string
-    bool equal = is_equal(10, 10);     # Function call -> bool
-    
-    # Test complex expressions with function calls
-    int complex1 = add_numbers(3, 4) + 5;  # Function call + int -> int
-    bool complex2 = is_equal(x, 10) and flag;  # Function call and bool -> bool
-    string complex3 = concatenate("a", "b") + "c";  # Function call + string -> string
-    
-    # Test nested function calls
-    int nested = add_numbers(add_numbers(1, 2), 3);  # Nested function calls -> int
-    
-    # Test function call in condition
-    if (is_equal(x, 10)): {
-        int z = 42;
-    }
+    int result = modulo_stress_test();
 }
