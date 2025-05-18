@@ -35,7 +35,7 @@ typedef struct function_info {
 } function_info;
 
 // Debug level flag: 0 = errors only, 1 = basic info, 2 = verbose debug
-int debug_level = 2;  // Default: show basic info, but not detailed debug
+int debug_level = 0;  // Default: show basic info, but not detailed debug
 
 // Simple logging function with debug level control
 void log_debug(const char* message) {
@@ -1093,6 +1093,7 @@ int is_variable_usage(node* var_node, node* parent_node) {
         strcmp(var_node->token, "if-elif-else") == 0 || 
         strcmp(var_node->token, "elif") == 0 ||
         strcmp(var_node->token, "while") == 0 ||
+        strcmp(var_node->token, "pass") == 0 ||
         strcmp(var_node->token, "index") == 0 ||
         strcmp(var_node->token, "slice") == 0 ||    
         strcmp(var_node->token, "slice_step") == 0 ||
