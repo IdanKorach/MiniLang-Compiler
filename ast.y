@@ -203,67 +203,58 @@ assign: ID '=' expr SEMICOLON {$$ = mknode("assign", $1, $3);}
       | ID '=' expr error { yyerror("Missing semicolon after assignment"); YYABORT; }
       ;
 
-if_stmt: IF '(' expr ')' '{' statements '}' %prec LOWER_THAN_ELSE {
-            $$ = mknode("if", $3, $6);
-         }
-       | IF '(' expr ')' '{' statements '}' elif_chain {
-            $$ = mknode("if-elif", $3, mknode("", $6, $8));
-         }
-       | IF '(' expr ')' '{' statements '}' elif_chain ELSE '{' statements '}' {
-            node* if_elif = mknode("if-elif", $3, mknode("", $6, $8));
-            $$ = mknode("if-elif-else", if_elif, $11);
-         }
-       | IF '(' expr ')' '{' statements '}' ELSE '{' statements '}' {
-            node* if_part = mknode("if", $3, $6);
-            $$ = mknode("if-else", if_part, $10);
-         }
-       | IF '(' expr ')' COLON '{' statements '}' %prec LOWER_THAN_ELSE {
-            $$ = mknode("if", $3, $7);
-         }
-       | IF '(' expr ')' COLON statement {
-            $$ = mknode("if", $3, $6);
-         }
-       | IF expr COLON '{' statements '}' %prec LOWER_THAN_ELSE {
+if_stmt: IF expr COLON '{' statements '}' %prec LOWER_THAN_ELSE {
             $$ = mknode("if", $2, $5);
          }
-       | IF expr COLON statement {
-            $$ = mknode("if", $2, $4);
+       | IF expr COLON '{' statements '}' elif_chain {
+            $$ = mknode("if-elif", $2, mknode("", $5, $7));
          }
-       | IF expr COLON statement ELSE COLON '{' statements '}' {
-            $$ = mknode("if-else", mknode("if", $2, $4), $8);
+       | IF expr COLON '{' statements '}' elif_chain ELSE COLON '{' statements '}' {
+            node* if_elif = mknode("if-elif", $2, mknode("", $5, $7));
+            $$ = mknode("if-elif-else", if_elif, $11);
          }
        | IF expr COLON '{' statements '}' ELSE COLON '{' statements '}' {
             $$ = mknode("if-else", mknode("if", $2, $5), $10);
          }
-       | IF expr COLON '{' statements '}' elif_chain { // added this 
-           $$ = mknode("if-elif", $2, mknode("", $5, $7));
-        } 
        | IF expr COLON '{' statements '}' ELSE COLON statement {
             $$ = mknode("if-else", mknode("if", $2, $5), $9);
+         }
+       | IF expr COLON statement %prec LOWER_THAN_ELSE {
+            $$ = mknode("if", $2, $4);
+         }
+       | IF expr COLON statement elif_chain {
+            $$ = mknode("if-elif", $2, mknode("", $4, $5));
+         }
+       | IF expr COLON statement elif_chain ELSE COLON '{' statements '}' {
+            node* if_elif = mknode("if-elif", $2, mknode("", $4, $5));
+            $$ = mknode("if-elif-else", if_elif, $9);
+         }
+       | IF expr COLON statement elif_chain ELSE COLON statement {
+            node* if_elif = mknode("if-elif", $2, mknode("", $4, $5));
+            $$ = mknode("if-elif-else", if_elif, $8);
+         }
+       | IF expr COLON statement ELSE COLON '{' statements '}' {
+            $$ = mknode("if-else", mknode("if", $2, $4), $8);
          }
        | IF expr COLON statement ELSE COLON statement {
             $$ = mknode("if-else", mknode("if", $2, $4), $7);
          }
-       | IF '(' expr error '{' { yyerror("Missing closing parenthesis in if condition"); YYABORT; }
-       | IF '(' error ')' { yyerror("Invalid condition in if statement"); YYABORT; }
        | IF error { yyerror("Invalid if statement"); YYABORT; }
        ;
 
-elif_chain: ELIF '(' expr ')' '{' statements '}' {
-              $$ = mknode("elif", $3, $6);
-           }
-          | ELIF '(' expr ')' '{' statements '}' elif_chain {
-              $$ = mknode("", mknode("elif", $3, $6), $8);
-           }
-          | ELIF '(' expr error '{' { yyerror("Missing closing parenthesis in elif condition"); YYABORT; }
-          | ELIF '(' error ')' { yyerror("Invalid condition in elif statement"); YYABORT; }
-          | ELIF error { yyerror("Invalid elif statement"); YYABORT; }
-          | ELIF expr COLON '{' statements '}' {
+elif_chain: ELIF expr COLON '{' statements '}' {
               $$ = mknode("elif", $2, $5);
+           }
+          | ELIF expr COLON '{' statements '}' elif_chain {
+              $$ = mknode("", mknode("elif", $2, $5), $7);
            }
           | ELIF expr COLON statement {
               $$ = mknode("elif", $2, $4);
            }
+          | ELIF expr COLON statement elif_chain {
+              $$ = mknode("", mknode("elif", $2, $4), $5);
+           }
+          | ELIF error { yyerror("Invalid elif statement"); YYABORT; }
           ;
 
 while_stmt: WHILE '(' expr ')' '{' statements '}' {

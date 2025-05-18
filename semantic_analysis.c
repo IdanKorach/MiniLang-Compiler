@@ -35,7 +35,7 @@ typedef struct function_info {
 } function_info;
 
 // Debug level flag: 0 = errors only, 1 = basic info, 2 = verbose debug
-int debug_level = 0;  // Default: show basic info, but not detailed debug
+int debug_level = 2;  // Default: show basic info, but not detailed debug
 
 // Simple logging function with debug level control
 void log_debug(const char* message) {
@@ -969,6 +969,10 @@ int is_variable_usage(node* var_node, node* parent_node) {
         strcmp(var_node->token, "return_type") == 0 ||
         strcmp(var_node->token, "call") == 0 ||
         strcmp(var_node->token, "if") == 0 ||
+        strcmp(var_node->token, "if-else") == 0 ||  
+        strcmp(var_node->token, "if-elif") == 0 ||  
+        strcmp(var_node->token, "if-elif-else") == 0 || 
+        strcmp(var_node->token, "elif") == 0 ||
         strcmp(var_node->token, "while") == 0 ||
         strcmp(var_node->token, "index") == 0 ||
         strcmp(var_node->token, "return") == 0) {
@@ -1349,6 +1353,86 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
             }
         }
         return;
+    }
+
+    if (root->token && (strcmp(root->token, "if-elif") == 0 || 
+                       strcmp(root->token, "if-elif-else") == 0)) {
+        // Process the condition part (left child)
+        if (root->left) {
+            // Validate the condition
+            validate_condition_type(root->left, curr_scope, "if-elif");
+            
+            // Process left child (should be an if condition)
+            analyze_node(root->left, root, curr_scope);
+        }
+        
+        // Process the body/branches (right child)
+        if (root->right) {
+            // Create a new scope for blocks
+            scope* block_scope = mkscope(curr_scope);
+            if (curr_scope->scope_name) {
+                char name_buffer[256];
+                sprintf(name_buffer, "%s-if-elif-block", curr_scope->scope_name);
+                block_scope->scope_name = strdup(name_buffer);
+            } else {
+                block_scope->scope_name = strdup("if-elif-block");
+            }
+            
+            analyze_node(root->right, root, block_scope);
+        }
+        
+        return; // Skip normal child traversal since we've handled it specifically
+    }
+
+    // Special handling for elif node
+    if (root->token && strcmp(root->token, "elif") == 0) {
+        // Validate the condition
+        validate_condition_type(root->left, curr_scope, "elif");
+        
+        // Process the condition (left child)
+        if (root->left) {
+            analyze_node(root->left, root, curr_scope);
+        }
+        
+        // Process the body (right child) with a new scope
+        if (root->right) {
+            scope* elif_scope = mkscope(curr_scope);
+            if (curr_scope->scope_name) {
+                char name_buffer[256];
+                sprintf(name_buffer, "%s-elif-block", curr_scope->scope_name);
+                elif_scope->scope_name = strdup(name_buffer);
+            } else {
+                elif_scope->scope_name = strdup("elif-block");
+            }
+            
+            analyze_node(root->right, root, elif_scope);
+        }
+        
+        return; // Skip normal traversal
+    }
+    
+    // Special handling for if-else
+    if (root->token && strcmp(root->token, "if-else") == 0) {
+        // Process the if part (left child)
+        if (root->left) {
+            analyze_node(root->left, root, curr_scope);
+        }
+        
+        // Process the else part (right child) with a new scope
+        if (root->right) {
+            scope* else_scope = mkscope(curr_scope);
+            if (curr_scope->scope_name) {
+                char name_buffer[256];
+                sprintf(name_buffer, "%s-else-block", curr_scope->scope_name);
+                else_scope->scope_name = strdup(name_buffer);
+            } else {
+                else_scope->scope_name = strdup("else-block");
+            }
+            
+            analyze_node(root->right, root, else_scope);
+        }
+        
+        return; // Skip normal traversal
     }
 
     if (root->token && strcmp(root->token, "index") == 0) {
