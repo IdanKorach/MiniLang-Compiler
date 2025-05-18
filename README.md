@@ -103,9 +103,13 @@ string with_escape = "Say \"Hello\"";
 string with_newline = "Line 1\nLine 2";
 string single_quoted = 'also supported';
 
-# String indexing (single character access only)
-string first_char = name[0];  # Returns a string containing single character
-# Note: String slicing (e.g., text[0:5]) is not supported
+# String indexing and slicing operations
+string first_char = name[0];          # Single character access
+string substring = name[1:5];         # Slice from index 1 to 5
+string prefix = name[:3];             # Slice from start to index 3
+string suffix = name[3:];             # Slice from index 3 to end
+string full_copy = name[:];           # Full copy of the string
+string with_step = name[0:10:2];      # Slice with step (every other character)
 ```
 
 #### Parameter Types
@@ -125,6 +129,11 @@ while (condition) : {
     // statements
 }
 ```
+## Language Limitations
+
+- Unary minus operator (`-n`) is not supported. Use subtraction instead: `0 - n`
+- Strict type checking for comparisons - operands of `==` and `!=` must be of the same type
+- No built-in string length function - use explicit indexing for string operations
 
 ## Output
 
@@ -240,6 +249,9 @@ Found return statement in function 'test1'
 - Control flow analysis (dead code detection)
 - Array and data structure support
 - Optimizations and code generation
+- Support for unary minus operator
+- Built-in string length function
+- Implicit type conversion options
 
 ## Grammar Features
 
@@ -325,6 +337,10 @@ The compiler has been thoroughly tested with:
 - Complex expression evaluation
 - Various string literal formats (empty, quoted, escaped)
 - All data types and their combinations
+- String slicing operations
+- Complex operator precedence cases
+- Edge cases with various data types
+- Comprehensive battery of tests (10 test suites covering all language aspects)
 
 ## Example Programs
 
@@ -394,6 +410,13 @@ def errors() -> int: {
     int digit = num[0];  # Only strings can be indexed
 }
 ```
+## Recent Improvements
+
+- Fixed modulo operator precedence to handle expressions like `a % b == 0` correctly
+- Added comprehensive string slicing operations with Python-like syntax
+- Improved type handling in comparison operations
+- Enhanced semantic analyzer for better error detection
+- Created extensive test suite covering all language features
 
 ## Contributing
 
