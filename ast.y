@@ -116,7 +116,7 @@ param: type id_list {$$ = mknode($1->token, $2, NULL);}
      | error { yyerror("Invalid parameter"); YYABORT; }
      ;
 
-id_list: ID {$$ = $1;} // changed the id_list to except parameters with default values 
+id_list: ID {$$ = $1;} 
        | ID COLON expr {$$ = mknode($1->token, $3, NULL);}
        | ID COMMA id_list {$$ = mknode("", $1, $3);} 
        | ID COLON expr COMMA id_list {node* with_default = mknode($1->token, $3, NULL);

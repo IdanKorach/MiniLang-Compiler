@@ -105,6 +105,12 @@ int check_index_operation(node* node, scope* current_scope);
 int check_slice_operation(node* node, scope* current_scope);
 char* get_type_name(int type);
 
+// Type constants
+#define TYPE_INT 1
+#define TYPE_STRING 2
+#define TYPE_BOOL 3
+#define TYPE_FLOAT 4
+
 // Helper function to create a new function_info
 function_info* create_function_info(char* name, int return_type) {
     function_info* new_func = (function_info*)malloc(sizeof(function_info));
@@ -130,12 +136,6 @@ function_info* find_function_by_name(char* func_name) {
     }
     return NULL;
 }
-
-// Type constants
-#define TYPE_INT 1
-#define TYPE_STRING 2
-#define TYPE_BOOL 3
-#define TYPE_FLOAT 4
 
 // Helper function to get type from string
 int get_type(char* type_str) {
