@@ -304,6 +304,14 @@ expr: expr PLUS expr {$$ = mknode("+", $1, $3);}
     | expr OR expr {$$ = mknode("or", $1, $3);}
     | NOT expr {$$ = mknode("not", NULL, $2);}
     | ID '[' expr ']' {$$ = mknode("index", $1, $3);}
+    | ID '[' expr COLON expr ']' {$$ = mknode("slice", $1, mknode("", $3, $5));} 
+    | ID '[' COLON expr ']' {$$ = mknode("slice", $1, mknode("", mknode("0", NULL, NULL), $4));}  
+    | ID '[' expr COLON ']' {$$ = mknode("slice", $1, mknode("", $3, mknode("-1", NULL, NULL)));}  
+    | ID '[' COLON ']' {$$ = mknode("slice", $1, mknode("", mknode("0", NULL, NULL), mknode("-1", NULL, NULL)));} 
+    | ID '[' expr COLON expr COLON expr ']' {$$ = mknode("slice_step", $1, mknode("", mknode("", $3, $5), $7));}  
+    | ID '[' COLON expr COLON expr ']' {$$ = mknode("slice_step", $1, mknode("", mknode("", mknode("0", NULL, NULL), $4), $6));}  
+    | ID '[' expr COLON COLON expr ']' {$$ = mknode("slice_step", $1, mknode("", mknode("", $3, mknode("-1", NULL, NULL)), $6));} 
+    | ID '[' COLON COLON expr ']' {$$ = mknode("slice_step", $1, mknode("", mknode("", mknode("0", NULL, NULL), mknode("-1", NULL, NULL)), $5));}   
     | '(' expr ')' {$$ = $2;}
     | '(' expr error { yyerror("Missing closing parenthesis in expression"); YYABORT; }
     | '(' error ')' { yyerror("Invalid expression in parentheses"); yyerrok; $$ = mknode("ERROR", NULL, NULL); YYABORT; }

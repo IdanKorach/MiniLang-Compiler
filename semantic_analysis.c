@@ -102,6 +102,7 @@ int current_position = 0;
 
 int get_expression_type(node* expr_node, scope* curr_scope);
 int check_index_operation(node* node, scope* current_scope);
+int check_slice_operation(node* node, scope* current_scope);
 char* get_type_name(int type);
 
 // Helper function to create a new function_info
@@ -586,6 +587,18 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
         log_debug("Detected string indexing operation");
         return check_index_operation(expr_node, curr_scope);
     }
+
+    // Handle string slicing
+    if (strcmp(expr_node->token, "slice") == 0) {
+        log_debug("Detected string slicing operation");
+        return check_slice_operation(expr_node, curr_scope);
+    }
+
+    // Handle string slicing with step
+    if (strcmp(expr_node->token, "slice_step") == 0) {
+        log_debug("Detected string slicing with step operation");
+        return check_slice_operation(expr_node, curr_scope);
+    }
     
     // Check if it's a variable - look up its declared type
     var* found_var = find_variable_in_scope_hierarchy(curr_scope, expr_node->token);
@@ -748,6 +761,112 @@ int check_index_operation(node* node, scope* current_scope) {
     
     // If both checks pass, the result is a string (a single character is still a string in this language)
     log_info("String indexing operation validated successfully");
+    return TYPE_STRING;
+}
+
+// Handle string slicing operations
+int check_slice_operation(node* node, scope* current_scope) {
+    if (!node || (strcmp(node->token, "slice") != 0 && strcmp(node->token, "slice_step") != 0)) {
+        log_error("Internal error: check_slice_operation called on non-slice node");
+        return 0;
+    }
+    
+    // Get the string expression (left child)
+    if (!node->left) {
+        log_error("Invalid slice operation: missing variable");
+        return 0;
+    }
+    
+    // Check if the string expression is a string type
+    int string_type = 0;
+    if (node->left->token) {
+        // Check if it's a variable name
+        var* found_var = find_variable_in_scope_hierarchy(current_scope, node->left->token);
+        if (found_var) {
+            string_type = found_var->type;
+            log_debug_format("Found variable '%s' with type %d for slicing", node->left->token, string_type);
+        } else {
+            // Otherwise, evaluate as an expression
+            string_type = get_expression_type(node->left, current_scope);
+        }
+    } else {
+        string_type = get_expression_type(node->left, current_scope);
+    }
+    
+    if (string_type != TYPE_STRING) {
+        log_error_format("Slice operator '[::]' can only be used with string type, got '%s'", 
+                        get_type_name(string_type));
+        return 0;
+    }
+    
+    // Now check if the slice indices are integers
+    if (!node->right) {
+        log_error("Invalid slice operation: missing slice indices");
+        return 0;
+    }
+    
+    // For regular slicing (slice), we have a node structure like:
+    // node -> right -> (left, right) for start and end indices
+    if (strcmp(node->token, "slice") == 0) {
+        // Check start index type (could be NULL for default)
+        if (node->right->left && strcmp(node->right->left->token, "0") != 0) {
+            int start_type = get_expression_type(node->right->left, current_scope);
+            if (start_type != TYPE_INT) {
+                log_error_format("String slice start index must be of integer type, got '%s'", 
+                            get_type_name(start_type));
+                return 0;
+            }
+        }
+        
+        // Check end index type (could be NULL for default)
+        if (node->right->right && strcmp(node->right->right->token, "-1") != 0) {
+            int end_type = get_expression_type(node->right->right, current_scope);
+            if (end_type != TYPE_INT) {
+                log_error_format("String slice end index must be of integer type, got '%s'", 
+                            get_type_name(end_type));
+                return 0;
+            }
+        }
+    }
+    // For slice with step (slice_step), we have a more complex structure:
+    // node -> right -> (left, right) where left is another node with (left, right) for start and end
+    else if (strcmp(node->token, "slice_step") == 0) {
+        // Check if we have a valid start/end node
+        if (node->right->left) {
+            // Check start index
+            if (node->right->left->left && strcmp(node->right->left->left->token, "0") != 0) {
+                int start_type = get_expression_type(node->right->left->left, current_scope);
+                if (start_type != TYPE_INT) {
+                    log_error_format("String slice start index must be of integer type, got '%s'", 
+                                get_type_name(start_type));
+                    return 0;
+                }
+            }
+            
+            // Check end index
+            if (node->right->left->right && strcmp(node->right->left->right->token, "-1") != 0) {
+                int end_type = get_expression_type(node->right->left->right, current_scope);
+                if (end_type != TYPE_INT) {
+                    log_error_format("String slice end index must be of integer type, got '%s'", 
+                                get_type_name(end_type));
+                    return 0;
+                }
+            }
+        }
+        
+        // Check step type
+        if (node->right->right) {
+            int step_type = get_expression_type(node->right->right, current_scope);
+            if (step_type != TYPE_INT) {
+                log_error_format("String slice step must be of integer type, got '%s'", 
+                            get_type_name(step_type));
+                return 0;
+            }
+        }
+    }
+    
+    // If all checks pass, the result is a string
+    log_info("String slice operation validated successfully");
     return TYPE_STRING;
 }
 
@@ -975,6 +1094,8 @@ int is_variable_usage(node* var_node, node* parent_node) {
         strcmp(var_node->token, "elif") == 0 ||
         strcmp(var_node->token, "while") == 0 ||
         strcmp(var_node->token, "index") == 0 ||
+        strcmp(var_node->token, "slice") == 0 ||    
+        strcmp(var_node->token, "slice_step") == 0 ||
         strcmp(var_node->token, "return") == 0) {
         return 0;
     }
