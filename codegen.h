@@ -23,6 +23,10 @@ void generate_statements(struct node* stmts);
 void generate_init_statement(struct node* init);
 void generate_assign_statement(struct node* assign);
 
+// Expression generation functions
+char* generate_expression(struct node* expr);
+char* generate_binary_operation(struct node* expr);
+
 // Helper functions for temp variables and labels (NEW)
 char* new_temp();
 char* new_label();

@@ -53,15 +53,15 @@ void generate_function(struct node* func) {
     char* func_name = func->left->token;
     if (strcmp(func_name, "__main__") == 0)
         func_name = "main";  
-    printf("%s: \n", func_name);
-    printf("BeginFunc 0\n");
+    printf("%s:\n", func_name);
+    printf("    BeginFunc 0\n");
     
     // func->right contains the function body
     if (func->right) {
         generate_function_body(func->right);
     }
     
-    printf("EndFunc\n");
+    printf("    EndFunc\n");
 }
 
 // Generate code for function body
@@ -109,7 +109,7 @@ void generate_statement(struct node* stmt) {
         generate_assign_statement(stmt);
     }
     else {
-        printf("  // TODO: Statement type '%s'\n", stmt->token);
+        printf("    // TODO: Statement type '%s'\n", stmt->token);
     }
 }
 
@@ -117,15 +117,22 @@ void generate_statement(struct node* stmt) {
 void generate_init_statement(struct node* init) {
     if (!init || !init->left || !init->right) return;
     
-    // init->left is declare node, init->right is the value
+    // init->left is declare node, init->right is the value/expression
     struct node* declare = init->left;
-    struct node* value = init->right;
+    struct node* value_expr = init->right;
     
-    if (declare && declare->right && value) {
+    if (declare && declare->right && value_expr) {
         char* var_name = declare->right->token;  // Variable name
-        char* var_value = value->token;          // Value 
         
-        printf("  %s = %s\n", var_name, var_value);
+        // Generate expression (could be simple value or complex expression)
+        char* expr_result = generate_expression(value_expr);
+        
+        printf("    %s = %s\n", var_name, expr_result);
+        
+        // Free the temporary result string if it was allocated
+        if (expr_result != value_expr->token) {
+            free(expr_result);
+        }
     }
 }
 
@@ -134,7 +141,58 @@ void generate_assign_statement(struct node* assign) {
     if (!assign || !assign->left || !assign->right) return;
     
     char* var_name = assign->left->token;     // Variable name
-    char* var_value = assign->right->token;   // Value
     
-    printf("  %s = %s\n", var_name, var_value);
+    // Generate expression (could be simple value or complex expression)
+    char* expr_result = generate_expression(assign->right);
+    
+    printf("    %s = %s\n", var_name, expr_result);
+    
+    // Free the temporary result string if it was allocated
+    if (expr_result != assign->right->token) {
+        free(expr_result);
+    }
+}
+
+// Generate code for expressions
+char* generate_expression(struct node* expr) {
+    if (!expr) return NULL;
+    
+    // Check what type of expression this is
+    if (strcmp(expr->token, "+") == 0 ||
+        strcmp(expr->token, "-") == 0 ||
+        strcmp(expr->token, "*") == 0 ||
+        strcmp(expr->token, "/") == 0 ||
+        strcmp(expr->token, "%") == 0) {
+        // Binary arithmetic operation
+        return generate_binary_operation(expr);
+    }
+    else {
+        // Simple literal or identifier - return the token directly
+        return expr->token;
+    }
+}
+
+// Generate code for binary operations
+char* generate_binary_operation(struct node* expr) {
+    if (!expr || !expr->left || !expr->right) return NULL;
+    
+    // Generate code for left and right operands (recursively)
+    char* left_result = generate_expression(expr->left);
+    char* right_result = generate_expression(expr->right);
+    
+    // Generate a new temporary variable for the result
+    char* temp_var = new_temp();
+    
+    // Emit the 3AC instruction
+    printf("    %s = %s %s %s\n", temp_var, left_result, expr->token, right_result);
+    
+    // Clean up if we generated temporary variables for operands
+    if (left_result != expr->left->token) {
+        free(left_result);
+    }
+    if (right_result != expr->right->token) {
+        free(right_result);
+    }
+    
+    return temp_var;
 }

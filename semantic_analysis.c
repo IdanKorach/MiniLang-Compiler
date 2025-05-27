@@ -1713,7 +1713,7 @@ void semantic_analysis(struct node* root, scope* curr_scope) {
     analyze_node(ast_root, NULL, curr_scope);
 
     if (semantic_errors == 0) {
-        printf("=== Semantic analysis completed successfully ===");
+        printf("=== Semantic analysis completed successfully ===\n");
     } else {
         log_error_format("=== Semantic analysis failed with %d error(s) ===", semantic_errors);
     }
