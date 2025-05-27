@@ -1,13 +1,6 @@
 #include "semantic_analysis.h"
 #include <stdarg.h>
 
-// Node structure to access AST
-typedef struct node {
-    char *token;
-    struct node *left;
-    struct node *right;
-} node;
-
 // Variable structure
 typedef struct var {
     char* name;

@@ -5,9 +5,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Forward declarations - we don't need the full definitions here
 struct node;
 struct scope;
+
+typedef struct node {
+    char *token;
+    struct node *left;
+    struct node *right;
+} node;
 
 // Function declarations
 struct scope* mkscope(struct scope* parent);

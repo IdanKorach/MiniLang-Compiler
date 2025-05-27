@@ -18,6 +18,7 @@
     #include<string.h>
     #include<stdlib.h>
     #include "semantic_analysis.h"
+    #include "codegen.h"
 
     int yylex(void);
     int yyerror(const char* s);
@@ -25,12 +26,6 @@
     char *yytext;
     extern int semantic_errors;
     struct scope* global_scope;
-
-    typedef struct node {
-        char *token;
-        struct node *left;
-        struct node *right;
-    } node;
 
     node *mknode(char *token, node *left, node *right);
     void printtree(node *tree, int tabs);
@@ -49,6 +44,11 @@ s: program {
       // Perform semantic analysis
       global_scope = mkscope(NULL);
       semantic_analysis($1, global_scope);
+
+      // Generate 3AC code
+      if (semantic_errors == 0) {
+          generate_3ac($1, global_scope);
+      }
       
     } else if (main_function_found > 1) {
       printf("Error: Multiple '__main__' functions found.\n");
