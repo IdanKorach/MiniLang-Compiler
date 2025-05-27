@@ -4,8 +4,13 @@
 #include "semantic_analysis.h"
 #include <stdio.h>
 
+// Forward declarations
 struct node;
 struct scope;
+
+// Global counters for temp variables and labels
+extern int temp_counter;
+extern int label_counter;
 
 // Main 3AC generation function
 void generate_3ac(struct node* ast_root, struct scope* global_scope);
@@ -14,7 +19,13 @@ void generate_3ac(struct node* ast_root, struct scope* global_scope);
 void generate_function(struct node* func);
 void generate_function_body(struct node* body);
 void generate_statement(struct node* stmt);
+void generate_statements(struct node* stmts);
 void generate_init_statement(struct node* init);
 void generate_assign_statement(struct node* assign);
+
+// Helper functions for temp variables and labels (NEW)
+char* new_temp();
+char* new_label();
+void reset_counters();  // Reset counters for each function
 
 #endif // CODEGEN_H
