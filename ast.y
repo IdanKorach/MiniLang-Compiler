@@ -61,7 +61,15 @@ s: program {
   | error { yyerrok; }
   ;
 
-program: function program {$$ = mknode("", $1, $2);}
+program: function statement program {
+            yyerror("Statement found after function without braces. Multiple statements require braces '{}'");
+            YYABORT;
+         }
+       | function statement {
+            yyerror("Statement found after function without braces. Multiple statements require braces '{}'");
+            YYABORT;
+         }
+       | function program {$$ = mknode("", $1, $2);}
        | function          {$$ = $1;}
        ;
 

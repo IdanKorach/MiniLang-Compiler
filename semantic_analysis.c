@@ -471,17 +471,22 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
             return TYPE_STRING;  // Result of string concatenation is a string
         }
         
-        // Type checking for arithmetic operators
+        // Skip type checking if either operand has unknown type (likely undeclared variable)
+        if (left_type == 0 || right_type == 0) {
+            return 0; // Don't report additional type errors
+        }
+        
+        // Type checking for arithmetic operators (only if both types are known)
         if (left_type != TYPE_INT && left_type != TYPE_FLOAT) {
             log_error_format("Left operand of '%s' must be numeric (int or float), got '%s'", 
-                           expr_node->token, get_type_name(left_type));
+                        expr_node->token, get_type_name(left_type));
             return 0; 
         }
         
         // Right operand must also be numeric
         if (right_type != TYPE_INT && right_type != TYPE_FLOAT) {
             log_error_format("Right operand of '%s' must be numeric (int or float), got '%s'", 
-                           expr_node->token, get_type_name(right_type));
+                        expr_node->token, get_type_name(right_type));
             return 0; 
         }
         
@@ -543,16 +548,21 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
         int left_type = get_expression_type(expr_node->left, curr_scope);
         int right_type = get_expression_type(expr_node->right, curr_scope);
         
+        // Skip type checking if either operand has unknown type
+        if (left_type == 0 || right_type == 0) {
+            return TYPE_BOOL; // Still return bool for the comparison, but don't report type errors
+        }
+        
         // Both operands must be numeric (int or float)
         if (left_type != TYPE_INT && left_type != TYPE_FLOAT) {
             log_error_format("Left operand of '%s' must be numeric (int or float), got '%s'", 
-                           expr_node->token, get_type_name(left_type));
+                        expr_node->token, get_type_name(left_type));
             return 0; 
         }
         
         if (right_type != TYPE_INT && right_type != TYPE_FLOAT) {
             log_error_format("Right operand of '%s' must be numeric (int or float), got '%s'", 
-                           expr_node->token, get_type_name(right_type));
+                        expr_node->token, get_type_name(right_type));
             return 0; 
         }
         
@@ -655,6 +665,14 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
     }         
     
     // If we reach here, it's likely an undeclared variable or unknown operator
+    if (expr_node->token[0] >= 'a' && expr_node->token[0] <= 'z' || 
+        expr_node->token[0] >= 'A' && expr_node->token[0] <= 'Z' || 
+        expr_node->token[0] == '_') {
+        // This looks like an identifier that wasn't found
+        log_error_format("Variable '%s' used before declaration", expr_node->token);
+        return 0; // Still return 0, but we've reported the real error
+    }
+
     log_debug("Undeclared identifier - returning unknown type");
     return 0; // Return 0 to indicate we can't determine the type
 }
@@ -1713,7 +1731,7 @@ void semantic_analysis(struct node* root, scope* curr_scope) {
     analyze_node(ast_root, NULL, curr_scope);
 
     if (semantic_errors == 0) {
-        printf("=== Semantic analysis completed successfully ===\n");
+        printf("=== Semantic analysis completed successfully ===\n\n");
     } else {
         log_error_format("=== Semantic analysis failed with %d error(s) ===", semantic_errors);
     }

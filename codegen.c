@@ -27,7 +27,7 @@ void reset_counters() {
 
 // Generate 3AC code from the AST
 void generate_3ac(struct node* ast_root, struct scope* global_scope) {
-    printf("=== Starting 3AC Code Generation ===\n");
+    printf("=== Starting 3AC Code Generation ===\n\n");
     
     if (!ast_root) {
         printf("// No AST to process\n");
@@ -61,7 +61,7 @@ void generate_function(struct node* func) {
         generate_function_body(func->right);
     }
     
-    printf("    EndFunc\n");
+    printf("    EndFunc\n\n");
 }
 
 // Generate code for function body
@@ -162,8 +162,14 @@ char* generate_expression(struct node* expr) {
         strcmp(expr->token, "-") == 0 ||
         strcmp(expr->token, "*") == 0 ||
         strcmp(expr->token, "/") == 0 ||
-        strcmp(expr->token, "%") == 0) {
-        // Binary arithmetic operation
+        strcmp(expr->token, "%") == 0 ||
+        strcmp(expr->token, "==") == 0 ||
+        strcmp(expr->token, "!=") == 0 ||
+        strcmp(expr->token, "<") == 0 ||
+        strcmp(expr->token, ">") == 0 ||
+        strcmp(expr->token, "<=") == 0 ||
+        strcmp(expr->token, ">=") == 0) {
+        // Binary operation (arithmetic or comparison)
         return generate_binary_operation(expr);
     }
     else {
