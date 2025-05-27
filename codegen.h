@@ -27,6 +27,11 @@ void generate_assign_statement(struct node* assign);
 char* generate_expression(struct node* expr);
 char* generate_binary_operation(struct node* expr);
 
+// Logical expression generation functions
+char* generate_logical_and(struct node* expr);
+char* generate_logical_or(struct node* expr);
+char* generate_logical_not(struct node* expr);
+
 // Helper functions for temp variables and labels (NEW)
 char* new_temp();
 char* new_label();

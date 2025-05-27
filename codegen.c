@@ -172,6 +172,18 @@ char* generate_expression(struct node* expr) {
         // Binary operation (arithmetic or comparison)
         return generate_binary_operation(expr);
     }
+    else if (strcmp(expr->token, "and") == 0) {
+        // Logical AND with short-circuit evaluation
+        return generate_logical_and(expr);
+    }
+    else if (strcmp(expr->token, "or") == 0) {
+        // Logical OR with short-circuit evaluation
+        return generate_logical_or(expr);
+    }
+    else if (strcmp(expr->token, "not") == 0) {
+        // Logical NOT
+        return generate_logical_not(expr);
+    }
     else {
         // Simple literal or identifier - return the token directly
         return expr->token;
@@ -201,4 +213,93 @@ char* generate_binary_operation(struct node* expr) {
     }
     
     return temp_var;
+}
+
+// Generate code for logical AND with short-circuit evaluation
+char* generate_logical_and(struct node* expr) {
+    if (!expr || !expr->left || !expr->right) return NULL;
+    
+    // Generate code for left operand
+    char* left_result = generate_expression(expr->left);
+    
+    // Generate labels for short-circuit evaluation
+    char* false_label = new_label();
+    char* end_label = new_label();
+    char* result_temp = new_temp();
+    
+    // Short-circuit: if left is false, result is false
+    printf("    if_false %s goto %s\n", left_result, false_label);
+    
+    // Left is true, evaluate right operand
+    char* right_result = generate_expression(expr->right);
+    printf("    %s = %s\n", result_temp, right_result);
+    printf("    goto %s\n", end_label);
+    
+    // Left was false, result is false
+    printf("%s:\n", false_label);
+    printf("    %s = false\n", result_temp);
+    
+    printf("%s:\n", end_label);
+    
+    // Clean up temporaries
+    if (left_result != expr->left->token) free(left_result);
+    if (right_result != expr->right->token) free(right_result);
+    free(false_label);
+    free(end_label);
+    
+    return result_temp;
+}
+
+// Generate code for logical OR with short-circuit evaluation
+char* generate_logical_or(struct node* expr) {
+    if (!expr || !expr->left || !expr->right) return NULL;
+    
+    // Generate code for left operand
+    char* left_result = generate_expression(expr->left);
+    
+    // Generate labels for short-circuit evaluation
+    char* true_label = new_label();
+    char* end_label = new_label();
+    char* result_temp = new_temp();
+    
+    // Short-circuit: if left is true, result is true
+    printf("    if_true %s goto %s\n", left_result, true_label);
+    
+    // Left is false, evaluate right operand
+    char* right_result = generate_expression(expr->right);
+    printf("    %s = %s\n", result_temp, right_result);
+    printf("    goto %s\n", end_label);
+    
+    // Left was true, result is true
+    printf("%s:\n", true_label);
+    printf("    %s = true\n", result_temp);
+    
+    printf("%s:\n", end_label);
+    
+    // Clean up temporaries
+    if (left_result != expr->left->token) free(left_result);
+    if (right_result != expr->right->token) free(right_result);
+    free(true_label);
+    free(end_label);
+    
+    return result_temp;
+}
+
+// Generate code for logical NOT
+char* generate_logical_not(struct node* expr) {
+    if (!expr || !expr->right) return NULL;
+    
+    // Generate code for operand
+    char* operand_result = generate_expression(expr->right);
+    char* result_temp = new_temp();
+    
+    // Generate NOT operation
+    printf("    %s = not %s\n", result_temp, operand_result);
+    
+    // Clean up
+    if (operand_result != expr->right->token) {
+        free(operand_result);
+    }
+    
+    return result_temp;
 }
