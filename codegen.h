@@ -23,6 +23,16 @@ void generate_statements(struct node* stmts);
 void generate_init_statement(struct node* init);
 void generate_assign_statement(struct node* assign);
 
+// Control flow functions
+void generate_simple_if(struct node* if_node);
+void generate_if_else(struct node* if_else_node);
+void generate_if_elif(struct node* if_elif_node);  
+void generate_while_statement(struct node* while_node);
+void process_if_body_and_elif_chain(struct node* sequence, char* elif_start_label, char* end_label);
+void process_elif_chain(struct node* elif_sequence, char* current_label, char* end_label);
+void generate_single_elif(struct node* elif_node, char* end_label);
+void generate_single_elif_with_next(struct node* elif_node, char* next_label, char* end_label);
+
 // Expression generation functions
 char* generate_expression(struct node* expr);
 char* generate_binary_operation(struct node* expr);
@@ -32,7 +42,7 @@ char* generate_logical_and(struct node* expr);
 char* generate_logical_or(struct node* expr);
 char* generate_logical_not(struct node* expr);
 
-// Helper functions for temp variables and labels (NEW)
+// Helper functions for temp variables and labels
 char* new_temp();
 char* new_label();
 void reset_counters();  // Reset counters for each function

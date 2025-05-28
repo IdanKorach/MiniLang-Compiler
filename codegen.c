@@ -54,7 +54,7 @@ void generate_function(struct node* func) {
     if (strcmp(func_name, "__main__") == 0)
         func_name = "main";  
     printf("%s:\n", func_name);
-    printf("    BeginFunc 0\n");
+    printf("    BeginFunc\n");
     
     // func->right contains the function body
     if (func->right) {
@@ -98,6 +98,11 @@ void generate_statements(struct node* stmts) {
 // Generate code for a single statement
 void generate_statement(struct node* stmt) {
     if (!stmt) return;
+
+    if (strcmp(stmt->token, "") == 0) {
+        generate_statements(stmt);
+        return;
+    }
     
     // Check what kind of statement this is
     if (strcmp(stmt->token, "init") == 0) {
@@ -107,6 +112,22 @@ void generate_statement(struct node* stmt) {
     else if (strcmp(stmt->token, "assign") == 0) {
         // This is assignment
         generate_assign_statement(stmt);
+    }
+    else if (strcmp(stmt->token, "if") == 0) {
+        // This is an if statement
+        generate_simple_if(stmt);
+    }
+    else if (strcmp(stmt->token, "if-else") == 0) {
+        // If-else statement 
+        generate_if_else(stmt);
+    }
+    else if (strcmp(stmt->token, "if-elif") == 0) {
+        // If-elif chain 
+        generate_if_elif(stmt);
+    }
+    else if (strcmp(stmt->token, "while") == 0) {
+        // While loop statement 
+        generate_while_statement(stmt);
     }
     else {
         printf("    // TODO: Statement type '%s'\n", stmt->token);
@@ -302,4 +323,247 @@ char* generate_logical_not(struct node* expr) {
     }
     
     return result_temp;
+}
+
+// Generate simple if statement
+void generate_simple_if(struct node* if_node) {
+    if (!if_node || !if_node->left || !if_node->right) return;
+    
+    // if_node->left = condition
+    // if_node->right = if body statements
+    
+    // Generate condition evaluation
+    char* condition_result = generate_expression(if_node->left);
+    
+    // Generate end label for if statement
+    char* end_label = new_label();
+    
+    // Generate conditional jump: if condition is false, skip the if body
+    printf("    if_false %s goto %s\n", condition_result, end_label);
+    
+    // Generate if body
+    generate_statements(if_node->right);
+    
+    // End label
+    printf("%s:\n", end_label);
+    
+    // Clean up
+    if (condition_result != if_node->left->token) {
+        free(condition_result);
+    }
+    free(end_label);
+}
+
+// Generate if-else statement
+void generate_if_else(struct node* if_else_node) {
+    if (!if_else_node || !if_else_node->left || !if_else_node->right) return;
+    
+    // Based on typical AST structure:
+    // if_else_node->left = if part (contains condition and if body)
+    // if_else_node->right = else body
+    
+    struct node* if_part = if_else_node->left;
+    struct node* else_part = if_else_node->right;
+    
+    if (!if_part || !if_part->left || !if_part->right) return;
+    
+    // Extract condition and if body from if_part
+    struct node* condition = if_part->left;
+    struct node* if_body = if_part->right;
+    
+    // Generate condition evaluation
+    char* condition_result = generate_expression(condition);
+    
+    // Generate labels
+    char* else_label = new_label();  // Jump here if condition is false
+    char* end_label = new_label();   // Jump here to skip else after if
+    
+    // Generate conditional jump: if condition is false, go to else
+    printf("    if_false %s goto %s\n", condition_result, else_label);
+    
+    // Generate if body
+    generate_statements(if_body);
+    
+    // Jump to end after if body (skip else)
+    printf("    goto %s\n", end_label);
+    
+    // Else label and body
+    printf("%s:\n", else_label);
+    generate_statements(else_part);
+    
+    // End label
+    printf("%s:\n", end_label);
+    
+    // Clean up
+    if (condition_result != condition->token) {
+        free(condition_result);
+    }
+    free(else_label);
+    free(end_label);
+}
+
+// Generate while loop: while condition: { body }
+void generate_while_statement(struct node* while_node) {
+    if (!while_node || !while_node->left || !while_node->right) return;
+    
+    // while_node->left = condition
+    // while_node->right = loop body
+    
+    // Generate labels
+    char* loop_start_label = new_label();  // L1: loop begins here
+    char* loop_end_label = new_label();    // L2: exit loop here
+    
+    // Loop start label - this is where we come back to
+    printf("%s:\n", loop_start_label);
+    
+    // Evaluate condition
+    char* condition_result = generate_expression(while_node->left);
+    
+    // If condition is false, exit the loop
+    printf("    if_false %s goto %s\n", condition_result, loop_end_label);
+    
+    // Generate loop body
+    generate_statements(while_node->right);
+    
+    // Jump back to start of loop
+    printf("    goto %s\n", loop_start_label);
+    
+    // Loop end label
+    printf("%s:\n", loop_end_label);
+    
+    // Clean up
+    if (condition_result != while_node->left->token) {
+        free(condition_result);
+    }
+    free(loop_start_label);
+    free(loop_end_label);
+}
+
+
+void generate_if_elif(struct node* if_elif_node) {
+    if (!if_elif_node || !if_elif_node->left || !if_elif_node->right) return;
+    
+    // if_elif_node->left = initial if condition
+    // if_elif_node->right = sequence containing if body + elif chain
+    
+    // Generate the initial if condition
+    char* condition_result = generate_expression(if_elif_node->left);
+    
+    // Generate end label for entire chain
+    char* end_label = new_label();
+    char* first_elif_label = new_label();
+    
+    // Initial if: if condition is false, go to first elif
+    printf("    if_false %s goto %s\n", condition_result, first_elif_label);
+    
+    // Process the right side: if body + elif chain
+    process_if_body_and_elif_chain(if_elif_node->right, first_elif_label, end_label);
+    
+    // Final end label
+    printf("%s:\n", end_label);
+    
+    // Clean up
+    if (condition_result != if_elif_node->left->token) {
+        free(condition_result);
+    }
+    free(first_elif_label);
+    free(end_label);
+}
+
+// Process the sequence containing if body + elif chain
+void process_if_body_and_elif_chain(struct node* sequence, char* elif_start_label, char* end_label) {
+    if (!sequence) return;
+    
+    // sequence->left = if body (assign statement)
+    // sequence->right = elif chain
+    
+    // Generate if body first
+    if (sequence->left) {
+        generate_statement(sequence->left);  // This is the "assign" statement
+        printf("    goto %s\n", end_label);  // Skip all elifs after if body
+    }
+    
+    // Now process the elif chain
+    if (sequence->right) {
+        process_elif_chain(sequence->right, elif_start_label, end_label);
+    }
+}
+
+// Process the elif chain recursively
+void process_elif_chain(struct node* elif_sequence, char* current_label, char* end_label) {
+    if (!elif_sequence) return;
+    
+    // Print the current label (where we jump if previous condition failed)
+    printf("%s:\n", current_label);
+    
+    if (elif_sequence->token && strcmp(elif_sequence->token, "elif") == 0) {
+        // This is a single elif node
+        generate_single_elif(elif_sequence, end_label);
+    }
+    else if (strcmp(elif_sequence->token, "") == 0) {
+        // This is a sequence of elifs
+        // elif_sequence->left = first elif
+        // elif_sequence->right = remaining elifs (or single elif)
+        
+        if (elif_sequence->left && elif_sequence->left->token && 
+            strcmp(elif_sequence->left->token, "elif") == 0) {
+            
+            // Generate this elif
+            char* next_label = new_label();
+            generate_single_elif_with_next(elif_sequence->left, next_label, end_label);
+            
+            // Process remaining elifs
+            if (elif_sequence->right) {
+                process_elif_chain(elif_sequence->right, next_label, end_label);
+            } else {
+                // No more elifs, just print the next label
+                printf("%s:\n", next_label);
+                free(next_label);
+            }
+        }
+    }
+}
+
+// Generate a single elif that jumps to end if condition fails (last elif)
+void generate_single_elif(struct node* elif_node, char* end_label) {
+    if (!elif_node || !elif_node->left || !elif_node->right) return;
+    
+    // Generate elif condition
+    char* condition_result = generate_expression(elif_node->left);
+    
+    // If condition fails, jump to end (this is the last elif)
+    printf("    if_false %s goto %s\n", condition_result, end_label);
+    
+    // Generate elif body
+    generate_statements(elif_node->right);
+    
+    // Jump to end after body
+    printf("    goto %s\n", end_label);
+    
+    // Clean up
+    if (condition_result != elif_node->left->token) {
+        free(condition_result);
+    }
+}
+
+// Generate a single elif that jumps to next_label if condition fails
+void generate_single_elif_with_next(struct node* elif_node, char* next_label, char* end_label) {
+    if (!elif_node || !elif_node->left || !elif_node->right) return;
+    
+    // Generate elif condition
+    char* condition_result = generate_expression(elif_node->left);
+    
+    // If condition fails, jump to next elif
+    printf("    if_false %s goto %s\n", condition_result, next_label);
+    
+    // Generate elif body
+    generate_statements(elif_node->right);
+    
+    // Jump to end after body
+    printf("    goto %s\n", end_label);
+    
+    // Clean up
+    if (condition_result != elif_node->left->token) {
+        free(condition_result);
+    }
 }
