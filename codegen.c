@@ -40,6 +40,7 @@ void generate_3ac(struct node* ast_root, struct scope* global_scope) {
     printf("=== 3AC Generation Completed ===\n\n");
 }
 
+// Process the AST to find and generate code for functions
 void process_ast_functions(struct node* node) {
     if (!node) return;
     
@@ -114,6 +115,12 @@ void generate_statement(struct node* stmt) {
         generate_statements(stmt);
         return;
     }
+
+    // Skip nodes that are handled elsewhere
+    if (strcmp(stmt->token, "params") == 0 || 
+        strcmp(stmt->token, "return_type") == 0) {
+        return;
+    }
     
     // Check what kind of statement this is
     if (strcmp(stmt->token, "init") == 0) {
@@ -147,6 +154,10 @@ void generate_statement(struct node* stmt) {
     else if (strcmp(stmt->token, "call") == 0) {
         // Function call statement
         generate_function_call_statement(stmt);
+    }
+    else if (strcmp(stmt->token, "return") == 0) {
+        // Return statement
+        generate_return_statement(stmt);
     }
     else {
         printf("    // TODO: Statement type '%s'\n", stmt->token);
@@ -223,6 +234,10 @@ char* generate_expression(struct node* expr) {
     else if (strcmp(expr->token, "not") == 0) {
         // Logical NOT
         return generate_logical_not(expr);
+    }
+    else if (strcmp(expr->token, "call") == 0) {
+        // Function call that returns a value - NEW!
+        return generate_function_call_expression(expr);
     }
     else {
         // Simple literal or identifier - return the token directly
@@ -457,7 +472,7 @@ void generate_while_statement(struct node* while_node) {
     free(loop_end_label);
 }
 
-
+// Generate if-elif chain
 void generate_if_elif(struct node* if_elif_node) {
     if (!if_elif_node || !if_elif_node->left || !if_elif_node->right) return;
     
@@ -728,4 +743,50 @@ void generate_function_call_statement(struct node* call_stmt) {
     
     // Generate simple function call (no parameters for Phase 1)
     printf("    call %s\n", function_name);
+}
+
+// Generate return statement
+void generate_return_statement(struct node* return_node) {
+    if (!return_node) return;
+    
+    // Check if there's a return value
+    if (return_node->left) {
+        // return_node->left = expression to return
+        
+        // Generate the return expression
+        char* return_value = generate_expression(return_node->left);
+        
+        // Emit return with value
+        printf("    return %s\n", return_value);
+        
+        // Clean up if we generated a temporary
+        if (return_value != return_node->left->token) {
+            free(return_value);
+        }
+    } else {
+        // Empty return (no value)
+        printf("    return\n");
+    }
+}
+
+// Generate function call expression
+char* generate_function_call_expression(struct node* call_expr) {
+    if (!call_expr || !call_expr->left) {
+        return NULL;
+    }
+    
+    // call_expr->left should contain the function name
+    char* function_name = call_expr->left->token;
+    
+    if (!function_name) {
+        return NULL;
+    }
+    
+    // Generate a temporary variable for the return value
+    char* result_temp = new_temp();
+    
+    // Generate LCall instruction (function call with return value)
+    printf("    %s = LCall %s\n", result_temp, function_name);
+    
+    return result_temp;
 }

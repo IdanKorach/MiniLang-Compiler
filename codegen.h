@@ -39,10 +39,12 @@ void process_elif_chain_with_else_destination(struct node* elif_sequence, char* 
 void generate_single_elif_with_else_fallback(struct node* elif_node, char* else_label, char* end_label);
 void process_ast_functions(struct node* node);
 void generate_function_call_statement(struct node* call_stmt);
+void generate_return_statement(struct node* return_node);
 
 // Expression generation functions
 char* generate_expression(struct node* expr);
 char* generate_binary_operation(struct node* expr);
+char* generate_function_call_expression(struct node* call_expr);
 
 // Logical expression generation functions
 char* generate_logical_and(struct node* expr);
