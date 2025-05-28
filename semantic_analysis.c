@@ -28,7 +28,7 @@ typedef struct function_info {
 } function_info;
 
 // Debug level flag: 0 = errors only, 1 = basic info, 2 = verbose debug
-int debug_level = 0;  // Default: show basic info, but not detailed debug
+int debug_level = 2;  // Default: show basic info, but not detailed debug
 
 // Simple logging function with debug level control
 void log_debug(const char* message) {
@@ -1489,8 +1489,38 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
         return;
     }
 
-    if (root->token && (strcmp(root->token, "if-elif") == 0 || 
-                       strcmp(root->token, "if-elif-else") == 0)) {
+    // Handle if-elif-else separately from if-elif
+    if (root->token && strcmp(root->token, "if-elif-else") == 0) {
+        log_info("Processing if-elif-else statement");
+        
+        // For if-elif-else:
+        // root->left = if-elif structure (no direct condition to validate)
+        // root->right = final else body
+        
+        // Process the if-elif part (left child)
+        if (root->left) {
+            analyze_node(root->left, root, curr_scope);
+        }
+        
+        // Process the else part (right child) with new scope
+        if (root->right) {
+            scope* else_scope = mkscope(curr_scope);
+            if (curr_scope->scope_name) {
+                char name_buffer[256];
+                sprintf(name_buffer, "%s-else-block", curr_scope->scope_name);
+                else_scope->scope_name = strdup(name_buffer);
+            } else {
+                else_scope->scope_name = strdup("else-block");
+            }
+            
+            analyze_node(root->right, root, else_scope);
+        }
+        
+        return; // Skip normal traversal
+    }
+
+    // Handle regular if-elif (keep existing logic)
+    if (root->token && strcmp(root->token, "if-elif") == 0) {
         // Process the condition part (left child)
         if (root->left) {
             // Validate the condition

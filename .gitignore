@@ -9,6 +9,7 @@ y.tab.h
 # Object files
 *.o
 semantic_analysis.o
+codegen.o
 
 # Other compiled files
 *.out
