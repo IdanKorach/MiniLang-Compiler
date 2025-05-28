@@ -34,12 +34,23 @@ void generate_3ac(struct node* ast_root, struct scope* global_scope) {
         return;
     }
     
-    // Process the function
-    if (strcmp(ast_root->token, "function") == 0) {
-        generate_function(ast_root);
-    }
+    // Handle multiple functions in the AST
+    process_ast_functions(ast_root);
     
     printf("=== 3AC Generation Completed ===\n\n");
+}
+
+void process_ast_functions(struct node* node) {
+    if (!node) return;
+    
+    // If this node is a function, process it
+    if (node->token && strcmp(node->token, "function") == 0) {
+        generate_function(node);
+    }
+    
+    // Check for more functions in siblings (left/right children)
+    process_ast_functions(node->left);
+    process_ast_functions(node->right);
 }
 
 // Generate code for a function
@@ -132,6 +143,10 @@ void generate_statement(struct node* stmt) {
     else if (strcmp(stmt->token, "while") == 0) {
         // While loop statement 
         generate_while_statement(stmt);
+    }
+    else if (strcmp(stmt->token, "call") == 0) {
+        // Function call statement
+        generate_function_call_statement(stmt);
     }
     else {
         printf("    // TODO: Statement type '%s'\n", stmt->token);
@@ -362,7 +377,6 @@ void generate_simple_if(struct node* if_node) {
 void generate_if_else(struct node* if_else_node) {
     if (!if_else_node || !if_else_node->left || !if_else_node->right) return;
     
-    // Based on typical AST structure:
     // if_else_node->left = if part (contains condition and if body)
     // if_else_node->right = else body
     
@@ -695,4 +709,23 @@ void generate_single_elif_with_else_fallback(struct node* elif_node, char* else_
     if (condition_result != elif_node->left->token) {
         free(condition_result);
     }
+}
+
+// Generate function call statements
+void generate_function_call_statement(struct node* call_stmt) {
+    if (!call_stmt || !call_stmt->left) {
+        printf("    // ERROR: Invalid function call\n");
+        return;
+    }
+    
+    // call_stmt->left should contain the function name
+    char* function_name = call_stmt->left->token;
+    
+    if (!function_name) {
+        printf("    // ERROR: Missing function name in call\n");
+        return;
+    }
+    
+    // Generate simple function call (no parameters for Phase 1)
+    printf("    call %s\n", function_name);
 }

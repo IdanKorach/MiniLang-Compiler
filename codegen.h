@@ -37,6 +37,8 @@ void generate_if_elif_with_final_else(struct node* if_elif_node, char* else_labe
 void process_if_body_and_elif_with_final_else(struct node* sequence, char* elif_start_label, char* else_label, char* end_label);
 void process_elif_chain_with_else_destination(struct node* elif_sequence, char* current_label, char* else_label, char* end_label);
 void generate_single_elif_with_else_fallback(struct node* elif_node, char* else_label, char* end_label);
+void process_ast_functions(struct node* node);
+void generate_function_call_statement(struct node* call_stmt);
 
 // Expression generation functions
 char* generate_expression(struct node* expr);
