@@ -278,6 +278,10 @@ void generate_statement(struct node* stmt) {
         // This is assignment
         generate_assign_statement(stmt);
     }
+    else if (strcmp(stmt->token, "multi_assign") == 0) {
+        // Handle multiple assignment
+        generate_multiple_assignment(stmt);
+    }
     else if (strcmp(stmt->token, "if") == 0) {
         // This is an if statement
         generate_simple_if(stmt);
@@ -314,8 +318,8 @@ void generate_statement(struct node* stmt) {
     }
 }
 
+// Handle declaration statement
 void handle_declaration_statement(struct node* declare_node) {
-    // No 3AC code needed for declarations - just space allocation
     return;
 }
 
@@ -357,6 +361,71 @@ void generate_assign_statement(struct node* assign) {
     if (expr_result != assign->right->token) {
         free(expr_result);
     }
+}
+
+// Generate code for multiple assignment
+void generate_multiple_assignment(struct node* multi_assign_node) {
+    if (!multi_assign_node || !multi_assign_node->left || !multi_assign_node->right) {
+        printf("    // ERROR: Invalid multiple assignment\n");
+        return;
+    }
+
+    // Extract left-hand side variables and right-hand side expressions
+    node** lhs_vars = NULL;
+    node** rhs_exprs = NULL;
+    int lhs_count = 0;
+    int rhs_count = 0;
+
+    // Count and extract variables/expressions
+    count_and_extract_variables(multi_assign_node->left, &lhs_vars, &lhs_count);
+    count_and_extract_expressions(multi_assign_node->right, &rhs_exprs, &rhs_count);
+
+    if (lhs_count != rhs_count || lhs_count == 0) {
+        printf("    // ERROR: Multiple assignment count mismatch\n");
+        goto cleanup;
+    }
+
+    // ALWAYS use temporaries for multiple assignment to handle swapping correctly
+    char** temp_vars = (char**)malloc(rhs_count * sizeof(char*));
+    
+    // Step 1: Evaluate all RHS expressions into temporaries
+    for (int i = 0; i < rhs_count; i++) {
+        if (rhs_exprs[i]) {
+            // Check if it's a simple variable or literal
+            if (rhs_exprs[i]->token && 
+                (rhs_exprs[i]->token[0] >= 'a' && rhs_exprs[i]->token[0] <= 'z') ||
+                (rhs_exprs[i]->token[0] >= 'A' && rhs_exprs[i]->token[0] <= 'Z') ||
+                (rhs_exprs[i]->token[0] >= '0' && rhs_exprs[i]->token[0] <= '9') ||
+                (rhs_exprs[i]->token[0] == '"')) {
+                
+                // For simple variables/literals, create a temporary
+                char* temp_var = new_temp();
+                printf("    %s = %s\n", temp_var, rhs_exprs[i]->token);
+                temp_vars[i] = temp_var;
+            } else {
+                // For complex expressions, generate normally
+                temp_vars[i] = generate_expression(rhs_exprs[i]);
+            }
+        } else {
+            temp_vars[i] = NULL;
+        }
+    }
+
+    // Step 2: Assign all temporaries to LHS variables
+    for (int i = 0; i < lhs_count; i++) {
+        if (lhs_vars[i] && lhs_vars[i]->token && temp_vars[i]) {
+            printf("    %s = %s\n", lhs_vars[i]->token, temp_vars[i]);
+            
+            // Free the temporary variable name (we allocated it)
+            free(temp_vars[i]);
+        }
+    }
+
+    free(temp_vars);
+
+cleanup:
+    if (lhs_vars) free(lhs_vars);
+    if (rhs_exprs) free(rhs_exprs);
 }
 
 // Generate code for expressions

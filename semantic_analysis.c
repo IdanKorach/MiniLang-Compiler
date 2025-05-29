@@ -206,8 +206,108 @@ int count_function_arguments(node* args_node) {
     return count;
 }
 
+// Count the number of items in a list (linked list style)
+void count_and_extract_variables(node* var_list, node*** vars, int* count) {
+    if (!var_list) return;
+
+    // First pass: count variables
+    *count = count_list_items(var_list);
+    
+    if (*count == 0) return;
+
+    // Allocate array
+    *vars = (node**)malloc(*count * sizeof(node*));
+    
+    // Second pass: extract variables
+    int index = 0;
+    extract_from_list(var_list, *vars, &index);
+}
+
+// Count the number of items in a list (linked list style)
+void count_and_extract_expressions(node* expr_list, node*** exprs, int* count) {
+    if (!expr_list) return;
+
+    // First pass: count expressions
+    *count = count_list_items(expr_list);
+    
+    if (*count == 0) return;
+
+    // Allocate array
+    *exprs = (node**)malloc(*count * sizeof(node*));
+    
+    // Second pass: extract expressions
+    int index = 0;
+    extract_from_list(expr_list, *exprs, &index);
+}
+
+// Helper function to extract items from a linked list style node
+int count_list_items(node* list) {
+    if (!list) return 0;
+    
+    // If this is a leaf node (has token), it's one item
+    if (list->token && strlen(list->token) > 0) {
+        return 1;
+    }
+    
+    // If this is a structure node, count children
+    int count = 0;
+    if (list->left) count += count_list_items(list->left);
+    if (list->right) count += count_list_items(list->right);
+    
+    return count;
+}
+
+// Helper function to extract items from a linked list style node
+void extract_from_list(node* list, node** array, int* index) {
+    if (!list || !array) return;
+    
+    // If this is a leaf node (has token), add it
+    if (list->token && strlen(list->token) > 0) {
+        array[(*index)++] = list;
+        return;
+    }
+    
+    // If this is a structure node, extract from children
+    if (list->left) extract_from_list(list->left, array, index);
+    if (list->right) extract_from_list(list->right, array, index);
+}
+
+// Helper function to extract items from a linked list style node
+void validate_single_assignment_in_multi(node* var_node, node* expr_node, scope* curr_scope) {
+    if (!var_node || !var_node->token || !expr_node) {
+        log_error("Invalid assignment pair in multiple assignment");
+        return;
+    }
+
+    char* var_name = var_node->token;
+    
+    // Check if variable exists
+    var* found_var = find_variable_in_scope_hierarchy(curr_scope, var_name);
+    if (!found_var) {
+        log_error_format("Cannot assign to undeclared variable '%s'", var_name);
+        return;
+    }
+
+    // Get expression type
+    int expr_type = get_expression_type(expr_node, curr_scope);
+    
+    if (expr_type == 0) {
+        log_info_format("Cannot determine type of expression for assignment to '%s'", var_name);
+        return;
+    }
+
+    // Check type compatibility
+    if (found_var->type != expr_type) {
+        log_error_format("Type mismatch in assignment to '%s'. Expected: %s, Got: %s", 
+                       var_name, get_type_name(found_var->type), get_type_name(expr_type));
+        return;
+    }
+
+    log_debug_format("Multiple assignment to '%s' validated (%s)", 
+                   var_name, get_type_name(found_var->type));
+}
+
 // Helper function to extract argument nodes from function call
-// Returns an array of argument nodes and sets count
 node** extract_function_arguments(node* args_node, int* arg_count) {
     if (!args_node) {
         *arg_count = 0;
@@ -931,6 +1031,48 @@ void handle_assignment(node* assign_node, scope* curr_scope) {
     
     log_debug_format("Assignment to '%s' type-checked successfully (%s)", 
                    var_name, get_type_name(found_var->type));
+}
+
+// Handle multiple assignment - validate each variable and expression
+void handle_multiple_assignment(node* multi_assign_node, scope* curr_scope) {
+    if (!multi_assign_node || !multi_assign_node->left || !multi_assign_node->right) {
+        log_error("Invalid multiple assignment node");
+        return;
+    }
+
+    log_info("Processing multiple assignment");
+
+    // Extract left-hand side variables and right-hand side expressions
+    node** lhs_vars = NULL;
+    node** rhs_exprs = NULL;
+    int lhs_count = 0;
+    int rhs_count = 0;
+
+    // Count and extract LHS variables
+    count_and_extract_variables(multi_assign_node->left, &lhs_vars, &lhs_count);
+    
+    // Count and extract RHS expressions  
+    count_and_extract_expressions(multi_assign_node->right, &rhs_exprs, &rhs_count);
+
+    // Check if counts match
+    if (lhs_count != rhs_count) {
+        log_error_format("Multiple assignment count mismatch: %d variables, %d values", 
+                        lhs_count, rhs_count);
+        goto cleanup;
+    }
+
+    log_info_format("Multiple assignment: %d variables = %d expressions", lhs_count, rhs_count);
+
+    // Validate each assignment
+    for (int i = 0; i < lhs_count && i < rhs_count; i++) {
+        if (lhs_vars[i] && rhs_exprs[i]) {
+            validate_single_assignment_in_multi(lhs_vars[i], rhs_exprs[i], curr_scope);
+        }
+    }
+
+cleanup:
+    if (lhs_vars) free(lhs_vars);
+    if (rhs_exprs) free(rhs_exprs);
 }
 
 // Handle a parameter - type is the token, param name needs to be found
@@ -1717,6 +1859,11 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
         }
     }
     
+    if (root->token && strcmp(root->token, "multi_assign") == 0) {
+        handle_multiple_assignment(root, curr_scope);
+        return; // Don't process as variable usage
+    }
+
     // Check if this is a function call
     if (root->token && strcmp(root->token, "call") == 0) {
         handle_function_call(root, curr_scope);

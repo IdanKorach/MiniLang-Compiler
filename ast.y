@@ -188,8 +188,17 @@ type: INT {$$ = mknode("int", NULL, NULL);}
     | error { yyerror("Invalid data type"); YYABORT; }
     ;
 
+lhs_list: ID {$$ = $1;}
+        | ID COMMA lhs_list {$$ = mknode("", $1, $3);}
+        ;
+
+expr_list: expr {$$ = $1;}
+         | expr COMMA expr_list {$$ = mknode("", $1, $3);}
+         ;
+
 assign: ID '=' expr SEMICOLON {$$ = mknode("assign", $1, $3);}
       | ID COLON expr SEMICOLON {$$ = mknode("assign", $1, $3);}
+      | lhs_list '=' expr_list SEMICOLON {$$ = mknode("multi_assign", $1, $3);}
       | ERROR_TOKEN '=' expr SEMICOLON { YYABORT; } 
       | ID '=' error SEMICOLON { 
             yyerror("Invalid expression in assignment"); 

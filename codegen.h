@@ -23,6 +23,7 @@ void generate_statement(struct node* stmt);
 void generate_statements(struct node* stmts);
 void generate_init_statement(struct node* init);
 void generate_assign_statement(struct node* assign);
+void generate_multiple_assignment(struct node* multi_assign_node);
 
 // Control flow functions
 void generate_simple_if(struct node* if_node);

@@ -116,6 +116,14 @@ node** extract_function_arguments(node* args_node, int* arg_count);
 int is_variable_usage(node* var_node, node* parent_node);
 int is_function_declared(char* func_name);
 
+// Multiple assignment handling
+void handle_multiple_assignment(node* multi_assign_node, scope* curr_scope);
+void count_and_extract_variables(node* var_list, node*** vars, int* count);
+void count_and_extract_expressions(node* expr_list, node*** exprs, int* count);
+int count_list_items(node* list);
+void extract_from_list(node* list, node** array, int* index);
+void validate_single_assignment_in_multi(node* var_node, node* expr_node, scope* curr_scope);
+
 // Main analysis function
 void analyze_node(node* root, node* parent, scope* curr_scope);
 void semantic_analysis(struct node* root, struct scope* curr_scope);
