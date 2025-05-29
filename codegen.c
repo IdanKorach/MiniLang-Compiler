@@ -394,6 +394,18 @@ char* generate_expression(struct node* expr) {
         // Function call that returns a value - NEW!
         return generate_function_call_expression(expr);
     }
+    else if (strcmp(expr->token, "index") == 0) {
+        // String indexing operation
+        return generate_string_index(expr);
+    }
+    else if (strcmp(expr->token, "slice") == 0) {
+        // String slicing operation
+        return generate_string_slice(expr);
+    }
+    else if (strcmp(expr->token, "slice_step") == 0) {
+        // String slicing with step operation
+        return generate_string_slice_step(expr);
+    }
     else {
         // Simple literal or identifier - return the token directly
         return expr->token;
@@ -1118,4 +1130,90 @@ char* generate_argument_value(struct node* arg_node) {
     }
     
     return NULL;
+}
+
+// Generate 3AC for string indexing: text[index]
+char* generate_string_index(struct node* index_node) {
+    if (!index_node || !index_node->left || !index_node->right) return NULL;
+    
+    char* string_var = index_node->left->token;  // The string variable
+    char* index_expr = generate_expression(index_node->right);  // The index
+    
+    char* result_temp = new_temp();
+    printf("    %s = %s[%s]\n", result_temp, string_var, index_expr);
+    
+    // Clean up if index was a complex expression
+    if (index_expr != index_node->right->token) {
+        free(index_expr);
+    }
+    
+    return result_temp;
+}
+
+// Generate 3AC for string slicing: text[start:end]
+char* generate_string_slice(struct node* slice_node) {
+    if (!slice_node || !slice_node->left || !slice_node->right) return NULL;
+    
+    char* string_var = slice_node->left->token;  // The string variable
+    
+    // Extract start and end indices from the slice structure
+    char* start_expr = "0";  // Default start
+    char* end_expr = "-1";   // Default end (full length)
+    
+    if (slice_node->right) {
+        if (slice_node->right->left) {
+            start_expr = generate_expression(slice_node->right->left);
+        }
+        if (slice_node->right->right) {
+            end_expr = generate_expression(slice_node->right->right);
+        }
+    }
+    
+    char* result_temp = new_temp();
+    printf("    %s = %s[%s:%s]\n", result_temp, string_var, start_expr, end_expr);
+    
+    // Clean up temporaries if needed
+    if (strcmp(start_expr, "0") != 0 && slice_node->right->left && 
+        start_expr != slice_node->right->left->token) {
+        free(start_expr);
+    }
+    if (strcmp(end_expr, "-1") != 0 && slice_node->right->right && 
+        end_expr != slice_node->right->right->token) {
+        free(end_expr);
+    }
+    
+    return result_temp;
+}
+
+// Generate 3AC for string slicing with step: text[start:end:step]
+char* generate_string_slice_step(struct node* slice_step_node) {
+    if (!slice_step_node || !slice_step_node->left || !slice_step_node->right) return NULL;
+    
+    char* string_var = slice_step_node->left->token;  // The string variable
+    
+    // Extract start, end, and step from the complex structure
+    char* start_expr = "0";   // Default start
+    char* end_expr = "-1";    // Default end
+    char* step_expr = "1";    // Default step
+    
+    if (slice_step_node->right) {
+        // slice_step structure: right -> (left: (start, end), right: step)
+        if (slice_step_node->right->left) {
+            if (slice_step_node->right->left->left) {
+                start_expr = generate_expression(slice_step_node->right->left->left);
+            }
+            if (slice_step_node->right->left->right) {
+                end_expr = generate_expression(slice_step_node->right->left->right);
+            }
+        }
+        if (slice_step_node->right->right) {
+            step_expr = generate_expression(slice_step_node->right->right);
+        }
+    }
+    
+    char* result_temp = new_temp();
+    printf("    %s = %s[%s:%s:%s]\n", result_temp, string_var, start_expr, end_expr, step_expr);
+    
+    // Clean up temporaries (simplified cleanup)
+    return result_temp;
 }

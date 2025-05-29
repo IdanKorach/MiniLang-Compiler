@@ -72,6 +72,11 @@ char* generate_logical_and(struct node* expr);
 char* generate_logical_or(struct node* expr);
 char* generate_logical_not(struct node* expr);
 
+// Index and slice generation functions
+char* generate_string_index(struct node* index_node);
+char* generate_string_slice(struct node* slice_node);
+char* generate_string_slice_step(struct node* slice_step_node);
+
 // Helper functions for temp variables and labels
 char* new_temp();
 char* new_label();
