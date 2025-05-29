@@ -42,6 +42,9 @@ void generate_single_elif_with_else_fallback(struct node* elif_node, char* else_
 void process_ast_functions(struct node* node);
 void generate_function_call_statement(struct node* call_stmt);
 void generate_return_statement(struct node* return_node);
+void generate_comma_declaration(struct node* declare_node);
+void generate_variable_list_assignments(struct node* var_list);
+int has_init_var_nodes(struct node* var_list);
 
 // Stack size calculation functions 
 int calculate_function_stack_size(struct node* func);

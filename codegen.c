@@ -311,7 +311,11 @@ void generate_statement(struct node* stmt) {
         generate_return_statement(stmt);
     }
     else if (strcmp(stmt->token, "declare") == 0) {
-        handle_declaration_statement(stmt);
+        // Check if this is a comma-separated declaration with initializations
+        if (stmt->right && has_init_var_nodes(stmt->right)) {
+            generate_comma_declaration(stmt);
+        }
+        // Otherwise, it's just a regular declaration (no 3AC code needed)
     }
     else if (strcmp(stmt->token, "pass") == 0) {
         // Pass statement - do nothing, just emit comment
@@ -355,6 +359,48 @@ void generate_init_statement(struct node* init) {
             free(expr_result);
         }
     }
+}
+
+// Generate code for a comma-separated declaration
+void generate_comma_declaration(struct node* declare_node) {
+    if (!declare_node || !declare_node->left || !declare_node->right) return;
+    
+    char* type_name = declare_node->left->token;
+    struct node* var_list = declare_node->right;
+    
+    // Process the variable list
+    generate_variable_list_assignments(var_list);
+}
+
+// Generate code for a variable list with assignments
+void generate_variable_list_assignments(struct node* var_list) {
+    if (!var_list) return;
+    
+    // Handle init_var nodes (variables with initialization)
+    if (var_list->token && strcmp(var_list->token, "init_var") == 0) {
+        if (var_list->left && var_list->right) {
+            char* var_name = var_list->left->token;
+            char* expr_result = generate_expression(var_list->right);
+            
+            printf("    %s = %s\n", var_name, expr_result);
+            
+            // Clean up if needed
+            if (expr_result != var_list->right->token) {
+                free(expr_result);
+            }
+        }
+        return;
+    }
+    
+    // Handle regular variable names (no initialization needed)
+    if (var_list->token && strlen(var_list->token) > 0) {
+        // Regular variables without initialization - no 3AC code needed
+        return;
+    }
+    
+    // Handle comma-separated lists
+    if (var_list->left) generate_variable_list_assignments(var_list->left);
+    if (var_list->right) generate_variable_list_assignments(var_list->right);
 }
 
 // Generate code for assignment
@@ -849,6 +895,7 @@ void generate_single_elif_with_next(struct node* elif_node, char* next_label, ch
     }
 }
 
+// Generate if-elif-else chain
 void generate_if_elif_else(struct node* if_elif_else_node) {
     if (!if_elif_else_node || !if_elif_else_node->left || !if_elif_else_node->right) return;
     
@@ -1130,6 +1177,17 @@ int is_argument_node(struct node* node) {
     return 1;
 }
 
+// Helper function to check if variable list has init_var nodes:
+int has_init_var_nodes(struct node* var_list) {
+    if (!var_list) return 0;
+    
+    if (var_list->token && strcmp(var_list->token, "init_var") == 0) {
+        return 1;
+    }
+    
+    return has_init_var_nodes(var_list->left) || has_init_var_nodes(var_list->right);
+}
+
 // Generate PushParam instruction for a single argument
 void generate_push_param(struct node* arg_node, int* total_bytes) {
     if (!arg_node) return;
@@ -1193,16 +1251,6 @@ char* generate_argument_value(struct node* arg_node) {
         strcmp(arg_node->token, "<=") == 0 ||
         strcmp(arg_node->token, ">=") == 0)) {
         return generate_expression(arg_node);
-    }
-    
-    // Block bare function names
-    if (arg_node->token) {
-        if (strcmp(arg_node->token, "multiply") == 0 ||
-            strcmp(arg_node->token, "add") == 0 ||
-            strcmp(arg_node->token, "helper_function") == 0 ||
-            strcmp(arg_node->token, "factorial") == 0) {
-            return NULL;
-        }
     }
     
     // Return literals and variables

@@ -162,14 +162,19 @@ arg_list: expr {$$ = $1;}
         | error { yyerrok; $$ = mknode("ERROR", NULL, NULL); }
         ;
 
-var_list: ID {$$ = $1;}
-        | ID COMMA var_list {$$ = mknode("", $1, $3);}
+var_list: var_item {$$ = $1;}
+        | var_item COMMA var_list {$$ = mknode("", $1, $3);}
+        ;
+
+var_item: ID {$$ = $1;}
+        | ID '=' expr {$$ = mknode("init_var", $1, $3);}
         ;
 
 declaration: type ID SEMICOLON {$$ = mknode("declare", $1, $2);}
-           | type var_list SEMICOLON {$$ = mknode("declare", $1, $2);}  // NEW: comma-separated variables
+           | type var_list SEMICOLON {$$ = mknode("declare", $1, $2);} 
            | type ID '=' expr SEMICOLON {$$ = mknode("init", mknode("declare", $1, $2), $4);}
            | type ID COLON expr SEMICOLON {$$ = mknode("init", mknode("declare", $1, $2), $4);}
+           | type var_list '=' expr_list SEMICOLON {$$ = mknode("multi_init", mknode("declare", $1, $2), $4);}
            | type ERROR_TOKEN SEMICOLON { YYABORT; } 
            | type ERROR_TOKEN '=' expr SEMICOLON { YYABORT; } 
            | type error SEMICOLON { yyerror("Invalid variable name"); yyerrok; $$ = mknode("declare", $1, mknode("ERROR", NULL, NULL)); }

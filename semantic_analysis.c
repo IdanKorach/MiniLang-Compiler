@@ -1142,11 +1142,45 @@ void handle_declaration(node* declare_node, scope* curr_scope) {
     process_variable_list(declare_node->right, type, curr_scope);
 }
 
-// ADD this new function to handle comma-separated variable lists
+// Process a list of variables in a declaration or assignment
 void process_variable_list(node* var_list, int type, scope* curr_scope) {
     if (!var_list) return;
     
-    // If this is a single variable (leaf node)
+    // Handle init_var nodes (variables with initialization)
+    if (var_list->token && strcmp(var_list->token, "init_var") == 0) {
+        if (!var_list->left || !var_list->left->token) {
+            log_error("Invalid init_var node structure");
+            return;
+        }
+        
+        char* var_name = var_list->left->token;
+        
+        // Check for redeclaration
+        if (find_variable_in_scope(curr_scope, var_name)) {
+            log_error_format("Variable '%s' already declared in this scope", var_name);
+            return;
+        }
+        
+        // Add variable to scope
+        add_variable(curr_scope, var_name, type);
+        log_debug_format("Added variable '%s' of type '%s' to scope (with initialization)", 
+                       var_name, get_type_name(type));
+        
+        // Validate initialization expression type
+        if (var_list->right) {
+            int expr_type = get_expression_type(var_list->right, curr_scope);
+            if (expr_type != 0 && expr_type != type) {
+                log_error_format("Type mismatch in initialization of '%s'. Expected: %s, Got: %s", 
+                               var_name, get_type_name(type), get_type_name(expr_type));
+            } else if (expr_type == type) {
+                log_info_format("Initialization of '%s' type-checked successfully (%s)", 
+                              var_name, get_type_name(type));
+            }
+        }
+        return;
+    }
+    
+    // Handle regular variable names (single variable)
     if (var_list->token && strlen(var_list->token) > 0) {
         if (find_variable_in_scope(curr_scope, var_list->token)) {
             log_error_format("Variable '%s' already declared in this scope", var_list->token);
@@ -1158,7 +1192,7 @@ void process_variable_list(node* var_list, int type, scope* curr_scope) {
         return;
     }
     
-    // If this is a comma-separated list (empty token with children)
+    // Handle comma-separated lists (empty token with children)
     if (var_list->left) process_variable_list(var_list->left, type, curr_scope);
     if (var_list->right) process_variable_list(var_list->right, type, curr_scope);
 }
@@ -1230,6 +1264,10 @@ int is_variable_usage(node* var_node, node* parent_node) {
         strcmp(var_node->token, "slice") == 0 ||    
         strcmp(var_node->token, "slice_step") == 0 ||
         strcmp(var_node->token, "return") == 0) {
+        return 0;
+    }
+
+    if (strcmp(var_node->token, "init_var") == 0) {
         return 0;
     }
     
@@ -1842,6 +1880,23 @@ void analyze_node(node* root, node* parent, scope* curr_scope) {
         }
         handle_initialization(root, curr_scope);
         return;
+    }
+
+    if (root->token && strcmp(root->token, "init_var") == 0) {
+        // This is a variable with initialization in a comma list
+        // root->left = variable name
+        // root->right = initialization expression
+        char* var_name = root->left->token;
+        
+        // Check if variable already exists in current scope
+        if (find_variable_in_scope(curr_scope, var_name)) {
+            log_error_format("Variable '%s' already declared in this scope", var_name);
+            return;
+        }
+        
+        // We need the type from the parent declare node
+        // This is a bit tricky with the current structure
+        // For now, we'll handle this in the declare node processing
     }
 
     // Check if this is a declaration node (standalone, not part of init)
