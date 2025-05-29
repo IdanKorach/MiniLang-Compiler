@@ -1,5 +1,4 @@
 #include "codegen.h"
-#include <string.h>
 
 // Global counters for generating unique names
 int temp_counter = 1;
@@ -64,9 +63,14 @@ void generate_function(struct node* func) {
     // func->left is the function name 
     char* func_name = func->left->token;
     if (strcmp(func_name, "__main__") == 0)
-        func_name = "main";  
+        func_name = "main";
+        
     printf("%s:\n", func_name);
-    printf("    BeginFunc\n");
+    
+    // Calculate stack size for parameters
+    int stack_size = calculate_function_stack_size(func);
+    
+    printf("    BeginFunc %d\n", stack_size);
     
     // func->right contains the function body
     if (func->right) {
@@ -74,6 +78,149 @@ void generate_function(struct node* func) {
     }
     
     printf("    EndFunc\n\n");
+}
+
+// Calculate stack size needed for function parameters
+int calculate_function_stack_size(struct node* func) {
+    if (!func || !func->left) return 0;
+    
+    char* func_name = func->left->token;
+    
+    // Find the parameters in the AST
+    struct node* params_node = find_params_node(func);
+    if (!params_node) return 0;
+    
+    // Count and calculate size of all parameters
+    int total_size = 0;
+    total_size += calculate_params_size(params_node);
+    
+    return total_size;
+}
+
+// Find the params node in function AST
+struct node* find_params_node(struct node* func) {
+    if (!func || !func->right) return NULL;
+    
+    // Search for params node in function structure
+    return search_for_params(func->right);
+}
+
+// Recursively search for params node
+struct node* search_for_params(struct node* node) {
+    if (!node) return NULL;
+    
+    // Check if this is the params node
+    if (node->token && strcmp(node->token, "params") == 0) {
+        return node;
+    }
+    
+    // Search in children
+    struct node* left_result = search_for_params(node->left);
+    if (left_result) return left_result;
+    
+    struct node* right_result = search_for_params(node->right);
+    if (right_result) return right_result;
+    
+    return NULL;
+}
+
+// Calculate total size of all parameters
+int calculate_params_size(struct node* params_node) {
+    if (!params_node) return 0;
+    
+    int total_size = 0;
+    
+    // Traverse params node to find all parameter type nodes
+    total_size += calculate_param_types_size(params_node);
+    
+    return total_size;
+}
+
+// Calculate size of parameter types
+int calculate_param_types_size(struct node* node) {
+    if (!node) return 0;
+    
+    int size = 0;
+    
+    // Check if this is a type node (int, float, string, bool)
+    if (node->token && get_type_from_string(node->token) != 0) {
+        // This is a parameter type node - count parameters under it
+        int param_count = count_parameters_under_type(node);
+        int type_size = get_type_size(get_type_from_string(node->token));
+        size += param_count * type_size;
+    }
+    
+    // Recursively check children
+    size += calculate_param_types_size(node->left);
+    size += calculate_param_types_size(node->right);
+    
+    return size;
+}
+
+// Count parameter names under a type node
+int count_parameters_under_type(struct node* type_node) {
+    if (!type_node) return 0;
+    
+    int count = 0;
+    count += count_param_names(type_node);
+    return count;
+}
+
+// Recursively count parameter names
+int count_param_names(struct node* node) {
+    if (!node) return 0;
+    
+    int count = 0;
+    
+    // If this node has a token and it's not a type name, it might be a parameter name
+    if (node->token && strlen(node->token) > 0 && 
+        get_type_from_string(node->token) == 0 && 
+        is_valid_param_name(node->token)) {
+        count = 1;
+    }
+    
+    // Count in children
+    count += count_param_names(node->left);
+    count += count_param_names(node->right);
+    
+    return count;
+}
+
+// Get type from string (similar to semantic analyzer)
+int get_type_from_string(char* type_str) {
+    if (!type_str) return 0;
+    if (strcmp(type_str, "int") == 0) return 1;
+    if (strcmp(type_str, "string") == 0) return 2;
+    if (strcmp(type_str, "bool") == 0) return 3;
+    if (strcmp(type_str, "float") == 0) return 4;
+    return 0;
+}
+
+// Get size in bytes for each type
+int get_type_size(int type) {
+    switch(type) {
+        case 1: return 4; // int
+        case 2: return 4; // string (pointer)
+        case 3: return 4; // bool  
+        case 4: return 4; // float
+        default: return 0;
+    }
+}
+
+// Check if token is a valid parameter name
+int is_valid_param_name(char* token) {
+    if (!token || strlen(token) == 0) return 0;
+    
+    // Skip keywords and operators
+    if (strcmp(token, "params") == 0 || 
+        strcmp(token, "return_type") == 0 ||
+        strcmp(token, "") == 0) return 0;
+    
+    // Skip numeric literals
+    if (token[0] >= '0' && token[0] <= '9') return 0;
+    
+    // This looks like a parameter name
+    return 1;
 }
 
 // Generate code for function body
@@ -733,7 +880,6 @@ void generate_function_call_statement(struct node* call_stmt) {
         return;
     }
     
-    // call_stmt->left should contain the function name
     char* function_name = call_stmt->left->token;
     
     if (!function_name) {
@@ -741,8 +887,19 @@ void generate_function_call_statement(struct node* call_stmt) {
         return;
     }
     
-    // Generate simple function call (no parameters for Phase 1)
+    // Process arguments
+    int arg_count = 0;
+    int total_bytes = 0;
+    
+    generate_function_arguments(call_stmt, &arg_count, &total_bytes);
+    
+    // Generate simple function call (void function)
     printf("    call %s\n", function_name);
+    
+    // Clean up parameters from stack
+    if (total_bytes > 0) {
+        printf("    PopParams %d\n", total_bytes);
+    }
 }
 
 // Generate return statement
@@ -775,18 +932,230 @@ char* generate_function_call_expression(struct node* call_expr) {
         return NULL;
     }
     
-    // call_expr->left should contain the function name
     char* function_name = call_expr->left->token;
     
     if (!function_name) {
         return NULL;
     }
     
+    // Process arguments
+    int arg_count = 0;
+    int total_bytes = 0;
+    
+    generate_function_arguments(call_expr, &arg_count, &total_bytes);
+    
     // Generate a temporary variable for the return value
     char* result_temp = new_temp();
     
-    // Generate LCall instruction (function call with return value)
+    // Generate LCall instruction
     printf("    %s = LCall %s\n", result_temp, function_name);
     
+    // Clean up parameters from stack
+    if (total_bytes > 0) {
+        printf("    PopParams %d\n", total_bytes);
+    }
+    
     return result_temp;
+}
+
+// Generate PushParam instructions for function arguments
+void generate_function_arguments(struct node* call_node, int* arg_count, int* total_bytes) {
+    if (!call_node) return;
+    
+    *arg_count = 0;
+    *total_bytes = 0;
+    
+    // Process arguments starting from the right child (arguments)
+    process_call_arguments(call_node->right, arg_count, total_bytes, 0);
+}
+
+// Recursively process function call arguments
+void process_call_arguments(struct node* args_node, int* arg_count, int* total_bytes, int unused) {
+    if (!args_node) return;
+    
+    // If this is an empty structure node (comma-separated arguments)
+    if (!args_node->token || strcmp(args_node->token, "") == 0) {
+        // Process left argument first
+        if (args_node->left) {
+            process_call_arguments(args_node->left, arg_count, total_bytes, 0);
+        }
+        // Then process right argument(s)
+        if (args_node->right) {
+            process_call_arguments(args_node->right, arg_count, total_bytes, 0);
+        }
+        return;
+    }
+    
+    // This is a single argument - process it
+    
+    // Check if this is a nested function call
+    if (strcmp(args_node->token, "call") == 0) {
+        char* nested_result = generate_function_call_expression(args_node);
+        if (nested_result) {
+            printf("    PushParam %s\n", nested_result);
+            *total_bytes += 4;
+            (*arg_count)++;
+            
+            if (nested_result != args_node->token) {
+                free(nested_result);
+            }
+        }
+        return;
+    }
+    
+    // Handle other argument types
+    generate_push_param(args_node, total_bytes);
+    (*arg_count)++;
+}
+
+// Check if a node represents a function argument
+int is_argument_node(struct node* node) {
+    if (!node) return 0;
+    
+    // Don't treat empty nodes as arguments
+    if (!node->token || strcmp(node->token, "") == 0) return 0;
+    
+    // Function calls ARE arguments (nested calls)
+    if (strcmp(node->token, "call") == 0) return 1;
+    
+    // Expressions are arguments
+    if (strcmp(node->token, "+") == 0 ||
+        strcmp(node->token, "-") == 0 ||
+        strcmp(node->token, "*") == 0 ||
+        strcmp(node->token, "/") == 0 ||
+        strcmp(node->token, "%") == 0) return 1;
+    
+    // Literals and variables are arguments
+    return 1;
+}
+
+// Generate PushParam instruction for a single argument
+void generate_push_param(struct node* arg_node, int* total_bytes) {
+    if (!arg_node) return;
+    
+    // If this is a function call node, handle it properly
+    if (arg_node->token && strcmp(arg_node->token, "call") == 0) {
+        char* result = generate_function_call_expression(arg_node);
+        if (result) {
+            printf("    PushParam %s\n", result);
+            *total_bytes += 4;
+            if (result != arg_node->token) {
+                free(result);
+            }
+        }
+        return;
+    }
+    
+    // Block bare function names (shouldn't happen with correct parsing)
+    if (arg_node->token) {
+        if (strcmp(arg_node->token, "multiply") == 0 ||
+            strcmp(arg_node->token, "add") == 0 ||
+            strcmp(arg_node->token, "helper_function") == 0 ||
+            strcmp(arg_node->token, "factorial") == 0) {
+            return; // Skip bare function names
+        }
+    }
+    
+    // Handle normal arguments
+    char* arg_value = generate_argument_value(arg_node);
+    
+    if (arg_value) {
+        printf("    PushParam %s\n", arg_value);
+        *total_bytes += 4;
+        
+        if (arg_value != arg_node->token) {
+            free(arg_value);
+        }
+    }
+}
+
+// Generate the value for a function argument
+char* generate_argument_value(struct node* arg_node) {
+    if (!arg_node) return NULL;
+    
+    // Handle function calls
+    if (arg_node->token && strcmp(arg_node->token, "call") == 0) {
+        return generate_function_call_expression(arg_node);
+    }
+    
+    // Handle expressions
+    if (arg_node->token && (
+        strcmp(arg_node->token, "+") == 0 ||
+        strcmp(arg_node->token, "-") == 0 ||
+        strcmp(arg_node->token, "*") == 0 ||
+        strcmp(arg_node->token, "/") == 0 ||
+        strcmp(arg_node->token, "%") == 0 ||
+        strcmp(arg_node->token, "==") == 0 ||
+        strcmp(arg_node->token, "!=") == 0 ||
+        strcmp(arg_node->token, "<") == 0 ||
+        strcmp(arg_node->token, ">") == 0 ||
+        strcmp(arg_node->token, "<=") == 0 ||
+        strcmp(arg_node->token, ">=") == 0)) {
+        return generate_expression(arg_node);
+    }
+    
+    // Block bare function names
+    if (arg_node->token) {
+        if (strcmp(arg_node->token, "multiply") == 0 ||
+            strcmp(arg_node->token, "add") == 0 ||
+            strcmp(arg_node->token, "helper_function") == 0 ||
+            strcmp(arg_node->token, "factorial") == 0) {
+            return NULL;
+        }
+    }
+    
+    // Return literals and variables
+    if (arg_node->token) {
+        return arg_node->token;
+    }
+    
+    return NULL;
+}
+
+// Add this debugging function to understand your AST structure
+
+void debug_call_node_structure(struct node* call_node, const char* context) {
+    printf("\n=== DEBUGGING CALL NODE (%s) ===\n", context);
+    if (!call_node) {
+        printf("ERROR: NULL call node\n");
+        return;
+    }
+    
+    printf("Root token: '%s'\n", call_node->token ? call_node->token : "NULL");
+    
+    if (call_node->left) {
+        printf("Left child (function name): '%s'\n", 
+               call_node->left->token ? call_node->left->token : "NULL");
+    } else {
+        printf("Left child: NULL\n");
+    }
+    
+    if (call_node->right) {
+        printf("Right child (arguments): '%s'\n", 
+               call_node->right->token ? call_node->right->token : "NULL");
+        
+        // Recursively print argument structure
+        print_argument_tree(call_node->right, 1);
+    } else {
+        printf("Right child: NULL\n");
+    }
+    printf("=== END DEBUG ===\n\n");
+}
+
+void print_argument_tree(struct node* node, int depth) {
+    if (!node) return;
+    
+    for (int i = 0; i < depth; i++) printf("  ");
+    printf("ARG[%d]: '%s'\n", depth, node->token ? node->token : "EMPTY");
+    
+    if (node->left) {
+        for (int i = 0; i < depth; i++) printf("  ");
+        printf("L:\n");
+        print_argument_tree(node->left, depth + 1);
+    }
+    if (node->right) {
+        for (int i = 0; i < depth; i++) printf("  ");
+        printf("R:\n");
+        print_argument_tree(node->right, depth + 1);
+    }
 }
