@@ -1,31 +1,4 @@
 #include "semantic_analysis.h"
-#include <stdarg.h>
-
-// Variable structure
-typedef struct var {
-    char* name;
-    int type;  // We'll use integers for types: 1=int, 2=string, 3=bool, 4=float
-    struct var* next;
-} var;
-
-// Scope structure
-typedef struct scope {
-    var* variables;
-    struct scope* parent;
-    char* scope_name;  // For debugging
-} scope;
-
-// Function information structure
-typedef struct function_info {
-    char* name;
-    int param_count;
-    int* param_types;        // Array of parameter types
-    char** param_names;      // Array of parameter names
-    int* has_default;        // Array indicating which params have defaults
-    int return_type;         // 0 for no return type, TYPE_INT/STRING/etc for others
-    int declaration_position; // Track declaration position or line number
-    struct function_info* next;
-} function_info;
 
 // Debug level flag: 0 = errors only, 1 = basic info, 2 = verbose debug
 int debug_level = 2;  // Default: show basic info, but not detailed debug
@@ -92,17 +65,6 @@ int declaration_counter = 0;
 int semantic_errors = 0;
 // Global variable to track current position in AST traversal
 int current_position = 0;
-
-int get_expression_type(node* expr_node, scope* curr_scope);
-int check_index_operation(node* node, scope* current_scope);
-int check_slice_operation(node* node, scope* current_scope);
-char* get_type_name(int type);
-
-// Type constants
-#define TYPE_INT 1
-#define TYPE_STRING 2
-#define TYPE_BOOL 3
-#define TYPE_FLOAT 4
 
 // Helper function to create a new function_info
 function_info* create_function_info(char* name, int return_type) {
@@ -1355,65 +1317,76 @@ int extract_return_type(node* func_node) {
 void process_params_for_function(node* param_node, function_info* func_info, scope* func_scope) {
     if (!param_node || !func_info) return;
     
-    // Check if this is a parameter (type followed by identifier)
+    // Check if this is a parameter type node (int, string, float, bool)
     if (param_node->token && get_type(param_node->token) != 0) {
         // This is a parameter type node
-        char* param_name = NULL;
-        int has_default_value = 0;
-        node* default_value_node = NULL;
+        int param_type = get_type(param_node->token);
         
-        // Extract parameter name and default value
-        if (param_node->left) {
-            if (param_node->left->token && strlen(param_node->left->token) > 0) {
-                if (get_type(param_node->left->token) == 0) {
-                    param_name = param_node->left->token;
-                    // Check if there's a default value (right side of the param name node)
-                    if (param_node->left->left) {
-                        has_default_value = 1;
-                        default_value_node = param_node->left->left;
-                    }
-                }
-            } else if (!param_node->left->token || strlen(param_node->left->token) == 0) {
-                if (param_node->left->left && param_node->left->left->token) {
-                    param_name = param_node->left->left->token;
-                    if (param_node->left->right) {
-                        has_default_value = 1;
-                        default_value_node = param_node->left->right;
-                    }
-                }
-            }
-        }
+        log_info_format("Processing parameter type: %s", param_node->token);
         
-        if (param_name) {
-            int param_type = get_type(param_node->token);
+        // Process all parameter names under this type
+        process_parameter_names_for_type(param_node, param_type, func_info, func_scope);
+    }
+    
+    // Recursively process other parameter type nodes
+    process_params_for_function(param_node->left, func_info, func_scope);
+    process_params_for_function(param_node->right, func_info, func_scope);
+}
+
+// Process all parameter names under a single type
+void process_parameter_names_for_type(node* type_node, int param_type, function_info* func_info, scope* func_scope) {
+    if (!type_node) return;
+    
+    // Traverse the type node to find all parameter names
+    collect_parameter_names(type_node, param_type, func_info, func_scope);
+}
+
+// Recursively collect parameter names from type node
+void collect_parameter_names(node* node, int param_type, function_info* func_info, scope* func_scope) {
+    if (!node) return;
+    
+    // If this node has a token and it's not a type name, it might be a parameter name
+    if (node->token && strlen(node->token) > 0 && get_type(node->token) == 0) {
+        // This looks like a parameter name
+        char* param_name = node->token;
+        
+        // Check if this is actually a parameter name (not a default value)
+        if (is_valid_parameter_name(param_name)) {
+            log_info_format("Found parameter: %s %s", get_type_name(param_type), param_name);
             
-            log_info_format("Found parameter: %s %s", param_node->token, param_name);
-            add_parameter_to_function(func_info, param_name, param_type, has_default_value);
+            // Add parameter to function
+            add_parameter_to_function(func_info, param_name, param_type, 0); // No default for now
             
-            // Add to the function scope (not a different scope)
+            // Add to function scope
             add_variable(func_scope, param_name, param_type);
-
-            // Check default value type if it exists
-            if (has_default_value && default_value_node) {
-                log_debug_format("Checking default value for parameter '%s'...", param_name);
-
-                // Get the type of the default value
-                int default_type = get_expression_type(default_value_node, func_scope);
-                
-                if (default_type == 0) {
-                    log_info_format("Cannot determine type of default value for '%s'", param_name);
-                } else if (default_type != param_type) {
-                    log_error_format("Default value type mismatch for parameter '%s'. Parameter type: %s, Default value type: %s", 
-                                   param_name, get_type_name(param_type), get_type_name(default_type));
-                } else {
-                    log_debug_format("Default value type OK: %s", get_type_name(default_type));
-                }
-            }
         }
     }
     
-    process_params_for_function(param_node->left, func_info, func_scope);
-    process_params_for_function(param_node->right, func_info, func_scope);
+    // Continue traversing to find more parameter names
+    collect_parameter_names(node->left, param_type, func_info, func_scope);
+    collect_parameter_names(node->right, param_type, func_info, func_scope);
+}
+
+// Check if a token is a valid parameter name
+int is_valid_parameter_name(char* token) {
+    if (!token || strlen(token) == 0) return 0;
+    
+    // Skip type names
+    if (get_type(token) != 0) return 0;
+    
+    // Skip common keywords/operators
+    if (strcmp(token, "params") == 0 || 
+        strcmp(token, "return_type") == 0 ||
+        strcmp(token, "") == 0) return 0;
+    
+    // Skip numeric literals
+    if (token[0] >= '0' && token[0] <= '9') return 0;
+    
+    // Skip string literals
+    if (token[0] == '"' || token[0] == '\'') return 0;
+    
+    // This looks like a valid parameter name
+    return 1;
 }
 
 // Function to analyze the AST and perform semantic checks
