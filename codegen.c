@@ -306,9 +306,17 @@ void generate_statement(struct node* stmt) {
         // Return statement
         generate_return_statement(stmt);
     }
+    else if (strcmp(stmt->token, "declare") == 0) {
+        handle_declaration_statement(stmt);
+    }
     else {
         printf("    // TODO: Statement type '%s'\n", stmt->token);
     }
+}
+
+void handle_declaration_statement(struct node* declare_node) {
+    // No 3AC code needed for declarations - just space allocation
+    return;
 }
 
 // Generate code for variable initialization
@@ -1110,52 +1118,4 @@ char* generate_argument_value(struct node* arg_node) {
     }
     
     return NULL;
-}
-
-// Add this debugging function to understand your AST structure
-
-void debug_call_node_structure(struct node* call_node, const char* context) {
-    printf("\n=== DEBUGGING CALL NODE (%s) ===\n", context);
-    if (!call_node) {
-        printf("ERROR: NULL call node\n");
-        return;
-    }
-    
-    printf("Root token: '%s'\n", call_node->token ? call_node->token : "NULL");
-    
-    if (call_node->left) {
-        printf("Left child (function name): '%s'\n", 
-               call_node->left->token ? call_node->left->token : "NULL");
-    } else {
-        printf("Left child: NULL\n");
-    }
-    
-    if (call_node->right) {
-        printf("Right child (arguments): '%s'\n", 
-               call_node->right->token ? call_node->right->token : "NULL");
-        
-        // Recursively print argument structure
-        print_argument_tree(call_node->right, 1);
-    } else {
-        printf("Right child: NULL\n");
-    }
-    printf("=== END DEBUG ===\n\n");
-}
-
-void print_argument_tree(struct node* node, int depth) {
-    if (!node) return;
-    
-    for (int i = 0; i < depth; i++) printf("  ");
-    printf("ARG[%d]: '%s'\n", depth, node->token ? node->token : "EMPTY");
-    
-    if (node->left) {
-        for (int i = 0; i < depth; i++) printf("  ");
-        printf("L:\n");
-        print_argument_tree(node->left, depth + 1);
-    }
-    if (node->right) {
-        for (int i = 0; i < depth; i++) printf("  ");
-        printf("R:\n");
-        print_argument_tree(node->right, depth + 1);
-    }
 }

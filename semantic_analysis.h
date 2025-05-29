@@ -101,6 +101,7 @@ void handle_while_statement(node* while_node, scope* curr_scope);
 void process_params(node* node, scope* func_scope);
 void process_params_for_function(node* param_node, function_info* func_info, scope* func_scope);
 void process_parameter_names_for_type(node* type_node, int param_type, function_info* func_info, scope* func_scope);
+void process_variable_list(node* var_list, int type, scope* curr_scope);
 void collect_parameter_names(node* node, int param_type, function_info* func_info, scope* func_scope);
 int is_valid_parameter_name(char* token);
 

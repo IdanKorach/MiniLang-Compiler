@@ -162,7 +162,12 @@ arg_list: expr {$$ = $1;}
         | error { yyerrok; $$ = mknode("ERROR", NULL, NULL); }
         ;
 
+var_list: ID {$$ = $1;}
+        | ID COMMA var_list {$$ = mknode("", $1, $3);}
+        ;
+
 declaration: type ID SEMICOLON {$$ = mknode("declare", $1, $2);}
+           | type var_list SEMICOLON {$$ = mknode("declare", $1, $2);}  // NEW: comma-separated variables
            | type ID '=' expr SEMICOLON {$$ = mknode("init", mknode("declare", $1, $2), $4);}
            | type ID COLON expr SEMICOLON {$$ = mknode("init", mknode("declare", $1, $2), $4);}
            | type ERROR_TOKEN SEMICOLON { YYABORT; } 

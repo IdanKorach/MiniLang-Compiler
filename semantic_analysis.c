@@ -986,23 +986,38 @@ void handle_declaration(node* declare_node, scope* curr_scope) {
     }
     
     char* type_str = declare_node->left->token;
-    char* var_name = declare_node->right->token;
-    
-    log_debug_format("Processing declaration: %s %s", type_str, var_name);
-    
     int type = get_type(type_str);
+    
     if (type == 0) {
         log_error_format("Unknown type '%s'", type_str);
         return;
     }
     
-    if (find_variable_in_scope(curr_scope, var_name)) {
-        log_error_format("Variable '%s' already declared in this scope", var_name);
+    log_debug_format("Processing declaration: %s with variable list", type_str);
+    
+    // Handle comma-separated variables
+    process_variable_list(declare_node->right, type, curr_scope);
+}
+
+// ADD this new function to handle comma-separated variable lists
+void process_variable_list(node* var_list, int type, scope* curr_scope) {
+    if (!var_list) return;
+    
+    // If this is a single variable (leaf node)
+    if (var_list->token && strlen(var_list->token) > 0) {
+        if (find_variable_in_scope(curr_scope, var_list->token)) {
+            log_error_format("Variable '%s' already declared in this scope", var_list->token);
+            return;
+        }
+        add_variable(curr_scope, var_list->token, type);
+        log_debug_format("Added variable '%s' of type '%s' to scope", 
+                       var_list->token, get_type_name(type));
         return;
     }
     
-    add_variable(curr_scope, var_name, type);
-    log_debug_format("Variable '%s' of type '%s' added to scope", var_name, get_type_name(type));
+    // If this is a comma-separated list (empty token with children)
+    if (var_list->left) process_variable_list(var_list->left, type, curr_scope);
+    if (var_list->right) process_variable_list(var_list->right, type, curr_scope);
 }
 
 // Handle if-statement validation

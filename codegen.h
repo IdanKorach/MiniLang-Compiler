@@ -60,6 +60,7 @@ void process_call_arguments(struct node* node, int* arg_count, int* total_bytes,
 int is_argument_node(struct node* node);
 void generate_push_param(struct node* arg_node, int* total_bytes);
 char* generate_argument_value(struct node* arg_node);
+void handle_declaration_statement(struct node* declare_node);
 
 // Expression generation functions
 char* generate_expression(struct node* expr);
