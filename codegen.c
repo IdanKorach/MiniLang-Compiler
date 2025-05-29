@@ -313,6 +313,10 @@ void generate_statement(struct node* stmt) {
     else if (strcmp(stmt->token, "declare") == 0) {
         handle_declaration_statement(stmt);
     }
+    else if (strcmp(stmt->token, "pass") == 0) {
+        // Pass statement - do nothing, just emit comment
+        printf("    // pass statement\n");
+    }
     else {
         printf("    // TODO: Statement type '%s'\n", stmt->token);
     }
@@ -333,6 +337,13 @@ void generate_init_statement(struct node* init) {
     
     if (declare && declare->right && value_expr) {
         char* var_name = declare->right->token;  // Variable name
+        
+        // Special handling for empty string initialization
+        if ((!value_expr->token || strlen(value_expr->token) == 0) && 
+            declare->left && strcmp(declare->left->token, "string") == 0) {
+            printf("    %s = \"\"\n", var_name);
+            return;
+        }
         
         // Generate expression (could be simple value or complex expression)
         char* expr_result = generate_expression(value_expr);
@@ -438,6 +449,7 @@ char* generate_expression(struct node* expr) {
         strcmp(expr->token, "*") == 0 ||
         strcmp(expr->token, "/") == 0 ||
         strcmp(expr->token, "%") == 0 ||
+        strcmp(expr->token, "**") == 0 ||
         strcmp(expr->token, "==") == 0 ||
         strcmp(expr->token, "!=") == 0 ||
         strcmp(expr->token, "<") == 0 ||

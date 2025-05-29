@@ -697,6 +697,7 @@ int get_expression_type(node* expr_node, scope* curr_scope) {
         return TYPE_STRING;
     }
     
+    // Check if it's a function call
     if (strcmp(expr_node->token, "call") == 0) {
         if (!expr_node->left || !expr_node->left->token) {
             log_debug("Invalid function call in expression");
