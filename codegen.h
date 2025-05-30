@@ -8,29 +8,32 @@
 // ============================================================================
 // FORWARD DECLARATIONS
 // ============================================================================
+
 struct node;
 struct scope;
 
 // ============================================================================
 // GLOBAL STATE MANAGEMENT
 // ============================================================================
-// Global counters for temp variables and labels
+
 extern int temp_counter;
 extern int label_counter;
 
-// Helper functions for temp variables and labels
+
 char* new_temp(void);
 char* new_label(void);
-void reset_counters(void);  // Reset counters for each function
+void reset_counters(void);  
 
 // ============================================================================
 // MAIN 3AC GENERATION ENTRY POINT
 // ============================================================================
+
 void generate_3ac(struct node* ast_root, struct scope* global_scope);
 
 // ============================================================================
 // FUNCTION-LEVEL CODE GENERATION
 // ============================================================================
+
 void process_ast_functions(struct node* node);
 void generate_function(struct node* func);
 void generate_function_body(struct node* body);
@@ -50,6 +53,7 @@ int is_valid_param_name(char* token);
 // ============================================================================
 // STATEMENT GENERATION
 // ============================================================================
+
 void generate_statement(struct node* stmt);
 void generate_statements(struct node* stmts);
 
@@ -71,6 +75,7 @@ void generate_return_statement(struct node* return_node);
 // ============================================================================
 // CONTROL FLOW GENERATION
 // ============================================================================
+
 // Basic control structures
 void generate_simple_if(struct node* if_node);
 void generate_if_else(struct node* if_else_node);
@@ -95,6 +100,7 @@ void generate_single_elif_with_else_fallback(struct node* elif_node, char* else_
 // ============================================================================
 // EXPRESSION GENERATION
 // ============================================================================
+
 // Main expression handler
 char* generate_expression(struct node* expr);
 
@@ -117,6 +123,7 @@ char* generate_string_slice_step(struct node* slice_step_node);
 // ============================================================================
 // FUNCTION ARGUMENT HANDLING
 // ============================================================================
+
 void generate_function_arguments(struct node* call_node, int* arg_count, int* total_bytes);
 void process_call_arguments(struct node* node, int* arg_count, int* total_bytes, int skip_first);
 void generate_push_param(struct node* arg_node, int* total_bytes);

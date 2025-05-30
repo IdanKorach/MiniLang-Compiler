@@ -1,7 +1,7 @@
 #include "semantic_analysis.h"
 
 // Debug level flag: 0 = errors only, 1 = basic info, 2 = verbose debug
-int debug_level = 2;  // Default: show basic info, but not detailed debug
+int debug_level = 0;  // Default: show basic info, but not detailed debug
 
 // Simple logging function with debug level control
 void log_debug(const char* message) {
@@ -1549,19 +1549,19 @@ void collect_parameter_names(node* node, int param_type, function_info* func_inf
         // Check if this is actually a parameter name (not a default value)
         if (is_valid_parameter_name(param_name)) {
             
-            // ADD THIS CHECK - Skip boolean literals used as default values:
+            // Skip boolean literals used as default values:
             if (strcmp(param_name, "true") == 0 || strcmp(param_name, "false") == 0) {
                 // This is a boolean default value, not a parameter name - SKIP IT!
                 return;
             }
             
-            // ADD THIS CHECK - Skip numeric literals used as default values:
+            // Skip numeric literals used as default values:
             if (param_name[0] >= '0' && param_name[0] <= '9') {
                 // This is a numeric default value, not a parameter name - SKIP IT!
                 return;
             }
             
-            // ADD THIS CHECK - Skip string literals used as default values:
+            // Skip string literals used as default values:
             if (param_name[0] == '"' || param_name[0] == '\'') {
                 // This is a string default value, not a parameter name - SKIP IT!
                 return;
@@ -1594,7 +1594,7 @@ int is_valid_parameter_name(char* token) {
         strcmp(token, "return_type") == 0 ||
         strcmp(token, "") == 0) return 0;
     
-    // ADD THESE CHECKS - Skip default value literals:
+    // Skip default value literals:
     
     // Skip boolean literals (default values)
     if (strcmp(token, "true") == 0 || strcmp(token, "false") == 0 || 

@@ -217,8 +217,6 @@ int is_valid_param_name(char* token) {
         strcmp(token, "return_type") == 0 ||
         strcmp(token, "") == 0) return 0;
     
-    // ADD THESE LINES - Skip default value literals:
-    
     // Skip boolean literals (default values)
     if (strcmp(token, "true") == 0 || strcmp(token, "false") == 0 || 
         strcmp(token, "True") == 0 || strcmp(token, "False") == 0) {
