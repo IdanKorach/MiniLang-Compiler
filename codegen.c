@@ -331,7 +331,7 @@ void generate_statement(struct node* stmt) {
         // Otherwise, it's just a regular declaration 
     }
     else if (strcmp(stmt->token, "pass") == 0) {
-        // Pass statement - do nothing, just emit comment
+        // Pass statement - do nothing, just print comment
         printf("    // pass statement\n");
     }
     else {
@@ -458,21 +458,15 @@ void generate_multiple_assignment(struct node* multi_assign_node) {
     
     // Evaluate all RHS expressions into temporaries
     for (int i = 0; i < rhs_count; i++) {
-        if (rhs_exprs[i]) {
-            // Check if it's a simple variable or literal
-            if (rhs_exprs[i]->token && 
-                (rhs_exprs[i]->token[0] >= 'a' && rhs_exprs[i]->token[0] <= 'z') ||
-                (rhs_exprs[i]->token[0] >= 'A' && rhs_exprs[i]->token[0] <= 'Z') ||
-                (rhs_exprs[i]->token[0] >= '0' && rhs_exprs[i]->token[0] <= '9') ||
-                (rhs_exprs[i]->token[0] == '"')) {
-                
-                // For simple variables/literals, create a temporary
-                char* temp_var = new_temp();
-                printf("    %s = %s\n", temp_var, rhs_exprs[i]->token);
-                temp_vars[i] = temp_var;
-            } else {
-                // For complex expressions, generate normally
-                temp_vars[i] = generate_expression(rhs_exprs[i]);
+        if (rhs_exprs[i]) {            
+            // Generate expression (handles function calls, slices, etc.)
+            temp_vars[i] = generate_expression(rhs_exprs[i]);
+            
+            // If generate_expression returned the original token, create a temp
+            if (temp_vars[i] == rhs_exprs[i]->token) {
+                char* new_temp_var = new_temp();
+                printf("    %s = %s\n", new_temp_var, temp_vars[i]);
+                temp_vars[i] = new_temp_var;
             }
         } else {
             temp_vars[i] = NULL;
@@ -484,20 +478,27 @@ void generate_multiple_assignment(struct node* multi_assign_node) {
         if (lhs_vars[i] && lhs_vars[i]->token && temp_vars[i]) {
             printf("    %s = %s\n", lhs_vars[i]->token, temp_vars[i]);
             
-            free(temp_vars[i]);
+            // Free temp_vars[i] if it was allocated by generate_expression
+            if (temp_vars[i] != rhs_exprs[i]->token) {
+                free(temp_vars[i]);
+            }
         }
     }
 
     free(temp_vars);
 
-cleanup:
-    if (lhs_vars) free(lhs_vars);
-    if (rhs_exprs) free(rhs_exprs);
+    cleanup:
+        if (lhs_vars) free(lhs_vars);
+        if (rhs_exprs) free(rhs_exprs);
 }
 
 // Generate code for expressions
 char* generate_expression(struct node* expr) {
     if (!expr) return NULL;
+    
+    if (!expr->token) {
+        return NULL;
+    }
     
     // Check what type of expression this is
     if (strcmp(expr->token, "+") == 0 ||
@@ -1074,13 +1075,15 @@ void generate_return_statement(struct node* return_node) {
 // Generate function call expression
 char* generate_function_call_expression(struct node* call_expr) {
     if (!call_expr || !call_expr->left) {
-        return NULL;
+        printf("    // ERROR: Invalid function call expression\n");
+        return strdup("call_error");
     }
     
     char* function_name = call_expr->left->token;
     
     if (!function_name) {
-        return NULL;
+        printf("    // ERROR: No function name in call expression\n");
+        return strdup("no_func_name");
     }
     
     // Process arguments
@@ -1105,13 +1108,19 @@ char* generate_function_call_expression(struct node* call_expr) {
 
 // Generate PushParam instructions for function arguments
 void generate_function_arguments(struct node* call_node, int* arg_count, int* total_bytes) {
-    if (!call_node) return;
+    if (!call_node) {
+        *arg_count = 0;
+        *total_bytes = 0;
+        return;
+    }
     
     *arg_count = 0;
     *total_bytes = 0;
     
     // Process arguments starting from the right child
-    process_call_arguments(call_node->right, arg_count, total_bytes, 0);
+    if (call_node->right) {
+        process_call_arguments(call_node->right, arg_count, total_bytes, 0);
+    }
 }
 
 // Process function call arguments
@@ -1268,34 +1277,45 @@ char* generate_string_index(struct node* index_node) {
 
 // Generate 3AC for string slicing
 char* generate_string_slice(struct node* slice_node) {
-    if (!slice_node || !slice_node->left || !slice_node->right) return NULL;
+    if (!slice_node || !slice_node->left || !slice_node->right) {
+        printf("    // ERROR: Invalid slice node\n");
+        return strdup("ERROR");
+    }
     
     char* string_var = slice_node->left->token;  // The string variable
     
-    // Extract start and end indices from the slice structure
-    char* start_expr = "0";  // Default start
-    char* end_expr = "-1";   // Default end (full length)
+    // Initialize default values
+    char* start_expr = strdup("0");   // Default start
+    char* end_expr = strdup("-1");    // Default end (full length)
+    int need_free_start = 1;
+    int need_free_end = 1;
     
+    // Extract start and end indices from the slice structure
     if (slice_node->right) {
         if (slice_node->right->left) {
-            start_expr = generate_expression(slice_node->right->left);
+            char* temp_start = generate_expression(slice_node->right->left);
+            if (temp_start) {
+                if (need_free_start) free(start_expr);
+                start_expr = temp_start;
+                need_free_start = (temp_start != slice_node->right->left->token);
+            }
         }
         if (slice_node->right->right) {
-            end_expr = generate_expression(slice_node->right->right);
+            char* temp_end = generate_expression(slice_node->right->right);
+            if (temp_end) {
+                if (need_free_end) free(end_expr);
+                end_expr = temp_end;
+                need_free_end = (temp_end != slice_node->right->right->token);
+            }
         }
     }
     
     char* result_temp = new_temp();
     printf("    %s = %s[%s:%s]\n", result_temp, string_var, start_expr, end_expr);
     
-    if (strcmp(start_expr, "0") != 0 && slice_node->right->left && 
-        start_expr != slice_node->right->left->token) {
-        free(start_expr);
-    }
-    if (strcmp(end_expr, "-1") != 0 && slice_node->right->right && 
-        end_expr != slice_node->right->right->token) {
-        free(end_expr);
-    }
+    // Clean up
+    if (need_free_start && start_expr) free(start_expr);
+    if (need_free_end && end_expr) free(end_expr);
     
     return result_temp;
 }
@@ -1330,4 +1350,23 @@ char* generate_string_slice_step(struct node* slice_step_node) {
     printf("    %s = %s[%s:%s:%s]\n", result_temp, string_var, start_expr, end_expr, step_expr);
     
     return result_temp;
+}
+
+void debug_print_node(struct node* node, int depth) {
+    if (!node) return;
+    
+    for (int i = 0; i < depth; i++) printf("  ");
+    printf("Node: '%s'\n", node->token ? node->token : "NULL");
+    
+    if (node->left) {
+        for (int i = 0; i < depth; i++) printf("  ");
+        printf("Left:\n");
+        debug_print_node(node->left, depth + 1);
+    }
+    
+    if (node->right) {
+        for (int i = 0; i < depth; i++) printf("  ");
+        printf("Right:\n");
+        debug_print_node(node->right, depth + 1);
+    }
 }
