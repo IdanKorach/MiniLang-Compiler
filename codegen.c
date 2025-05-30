@@ -4,21 +4,21 @@
 int temp_counter = 1;
 int label_counter = 1;
 
-// Helper function: generate new temporary variable
+// Generate new temporary variable
 char* new_temp() {
     char* temp = (char*)malloc(10);
     snprintf(temp, 10, "t%d", temp_counter++);
     return temp;
 }
 
-// Helper function: generate new label
+// Generate new label
 char* new_label() {
     char* label = (char*)malloc(10);
     snprintf(label, 10, "L%d", label_counter++);
     return label;
 }
 
-// Helper function: reset counters for each function
+// Reset counters for each function
 void reset_counters() {
     temp_counter = 1;
     label_counter = 1;
@@ -33,7 +33,7 @@ void generate_3ac(struct node* ast_root, struct scope* global_scope) {
         return;
     }
     
-    // Handle multiple functions in the AST
+    // Process the AST
     process_ast_functions(ast_root);
     
     printf("=== 3AC Generation Completed ===\n\n");
@@ -62,6 +62,7 @@ void generate_function(struct node* func) {
     
     // func->left is the function name 
     char* func_name = func->left->token;
+
     if (strcmp(func_name, "__main__") == 0)
         func_name = "main";
         
@@ -105,7 +106,7 @@ struct node* find_params_node(struct node* func) {
     return search_for_params(func->right);
 }
 
-// Recursively search for params node
+// Search for params node
 struct node* search_for_params(struct node* node) {
     if (!node) return NULL;
     
@@ -150,7 +151,7 @@ int calculate_param_types_size(struct node* node) {
         size += param_count * type_size;
     }
     
-    // Recursively check children
+    // Check children
     size += calculate_param_types_size(node->left);
     size += calculate_param_types_size(node->right);
     
@@ -166,7 +167,7 @@ int count_parameters_under_type(struct node* type_node) {
     return count;
 }
 
-// Recursively count parameter names
+// Count parameter names
 int count_param_names(struct node* node) {
     if (!node) return 0;
     
@@ -186,7 +187,7 @@ int count_param_names(struct node* node) {
     return count;
 }
 
-// Get type from string (similar to semantic analyzer)
+// Get type from string 
 int get_type_from_string(char* type_str) {
     if (!type_str) return 0;
     if (strcmp(type_str, "int") == 0) return 1;
@@ -216,8 +217,23 @@ int is_valid_param_name(char* token) {
         strcmp(token, "return_type") == 0 ||
         strcmp(token, "") == 0) return 0;
     
-    // Skip numeric literals
-    if (token[0] >= '0' && token[0] <= '9') return 0;
+    // ADD THESE LINES - Skip default value literals:
+    
+    // Skip boolean literals (default values)
+    if (strcmp(token, "true") == 0 || strcmp(token, "false") == 0 || 
+        strcmp(token, "True") == 0 || strcmp(token, "False") == 0) {
+        return 0;  // This is a default value, not a parameter name
+    }
+    
+    // Skip numeric literals (default values)
+    if (token[0] >= '0' && token[0] <= '9') {
+        return 0;  // This is a numeric default value
+    }
+    
+    // Skip string literals (default values)
+    if (token[0] == '"' || token[0] == '\'') {
+        return 0;  // This is a string default value
+    }
     
     // This looks like a parameter name
     return 1;
@@ -249,7 +265,7 @@ void generate_statements(struct node* stmts) {
         if (stmts->left) generate_statements(stmts->left);   // Process first statement(s)
         if (stmts->right) generate_statements(stmts->right); // Process remaining statement(s)
     } else {
-        // Single statement - process it
+        // Single statement 
         generate_statement(stmts);
     }
 }
@@ -269,7 +285,6 @@ void generate_statement(struct node* stmt) {
         return;
     }
     
-    // Check what kind of statement this is
     if (strcmp(stmt->token, "init") == 0) {
         // This is variable initialization
         generate_init_statement(stmt);
@@ -283,31 +298,31 @@ void generate_statement(struct node* stmt) {
         generate_multiple_assignment(stmt);
     }
     else if (strcmp(stmt->token, "if") == 0) {
-        // This is an if statement
+        // Handle if statement
         generate_simple_if(stmt);
     }
     else if (strcmp(stmt->token, "if-else") == 0) {
-        // If-else statement 
+        // Handle if-else statement 
         generate_if_else(stmt);
     }
     else if (strcmp(stmt->token, "if-elif") == 0) {
-        // If-elif chain 
+        // Handle if-elif chain 
         generate_if_elif(stmt);
     }
     else if (strcmp(stmt->token, "if-elif-else") == 0) {
-        // If-elif-else chain 
+        // Handle if-elif-else chain 
         generate_if_elif_else(stmt);
     }
     else if (strcmp(stmt->token, "while") == 0) {
-        // While loop statement 
+        // Handle while loop statement 
         generate_while_statement(stmt);
     }
     else if (strcmp(stmt->token, "call") == 0) {
-        // Function call statement
+        // Handle function call statement
         generate_function_call_statement(stmt);
     }
     else if (strcmp(stmt->token, "return") == 0) {
-        // Return statement
+        // Handle return statement
         generate_return_statement(stmt);
     }
     else if (strcmp(stmt->token, "declare") == 0) {
@@ -315,7 +330,7 @@ void generate_statement(struct node* stmt) {
         if (stmt->right && has_init_var_nodes(stmt->right)) {
             generate_comma_declaration(stmt);
         }
-        // Otherwise, it's just a regular declaration (no 3AC code needed)
+        // Otherwise, it's just a regular declaration 
     }
     else if (strcmp(stmt->token, "pass") == 0) {
         // Pass statement - do nothing, just emit comment
@@ -384,7 +399,6 @@ void generate_variable_list_assignments(struct node* var_list) {
             
             printf("    %s = %s\n", var_name, expr_result);
             
-            // Clean up if needed
             if (expr_result != var_list->right->token) {
                 free(expr_result);
             }
@@ -414,7 +428,6 @@ void generate_assign_statement(struct node* assign) {
     
     printf("    %s = %s\n", var_name, expr_result);
     
-    // Free the temporary result string if it was allocated
     if (expr_result != assign->right->token) {
         free(expr_result);
     }
@@ -442,10 +455,10 @@ void generate_multiple_assignment(struct node* multi_assign_node) {
         goto cleanup;
     }
 
-    // ALWAYS use temporaries for multiple assignment to handle swapping correctly
+    // Allocate temporary variables for RHS expressions
     char** temp_vars = (char**)malloc(rhs_count * sizeof(char*));
     
-    // Step 1: Evaluate all RHS expressions into temporaries
+    // Evaluate all RHS expressions into temporaries
     for (int i = 0; i < rhs_count; i++) {
         if (rhs_exprs[i]) {
             // Check if it's a simple variable or literal
@@ -468,12 +481,11 @@ void generate_multiple_assignment(struct node* multi_assign_node) {
         }
     }
 
-    // Step 2: Assign all temporaries to LHS variables
+    // Assign all temporaries to LHS variables
     for (int i = 0; i < lhs_count; i++) {
         if (lhs_vars[i] && lhs_vars[i]->token && temp_vars[i]) {
             printf("    %s = %s\n", lhs_vars[i]->token, temp_vars[i]);
             
-            // Free the temporary variable name (we allocated it)
             free(temp_vars[i]);
         }
     }
@@ -518,7 +530,7 @@ char* generate_expression(struct node* expr) {
         return generate_logical_not(expr);
     }
     else if (strcmp(expr->token, "call") == 0) {
-        // Function call that returns a value - NEW!
+        // Function call that returns a value
         return generate_function_call_expression(expr);
     }
     else if (strcmp(expr->token, "index") == 0) {
@@ -543,17 +555,16 @@ char* generate_expression(struct node* expr) {
 char* generate_binary_operation(struct node* expr) {
     if (!expr || !expr->left || !expr->right) return NULL;
     
-    // Generate code for left and right operands (recursively)
+    // Generate code for left and right operands
     char* left_result = generate_expression(expr->left);
     char* right_result = generate_expression(expr->right);
     
     // Generate a new temporary variable for the result
     char* temp_var = new_temp();
     
-    // Emit the 3AC instruction
+    // Print the 3AC instruction
     printf("    %s = %s %s %s\n", temp_var, left_result, expr->token, right_result);
     
-    // Clean up if we generated temporary variables for operands
     if (left_result != expr->left->token) {
         free(left_result);
     }
@@ -590,7 +601,6 @@ char* generate_logical_and(struct node* expr) {
     
     printf("%s:\n", end_label);
     
-    // Clean up temporaries
     if (left_result != expr->left->token) free(left_result);
     if (right_result != expr->right->token) free(right_result);
     free(false_label);
@@ -645,7 +655,6 @@ char* generate_logical_not(struct node* expr) {
     // Generate NOT operation
     printf("    %s = not %s\n", result_temp, operand_result);
     
-    // Clean up
     if (operand_result != expr->right->token) {
         free(operand_result);
     }
@@ -675,7 +684,6 @@ void generate_simple_if(struct node* if_node) {
     // End label
     printf("%s:\n", end_label);
     
-    // Clean up
     if (condition_result != if_node->left->token) {
         free(condition_result);
     }
@@ -721,7 +729,6 @@ void generate_if_else(struct node* if_else_node) {
     // End label
     printf("%s:\n", end_label);
     
-    // Clean up
     if (condition_result != condition->token) {
         free(condition_result);
     }
@@ -729,7 +736,7 @@ void generate_if_else(struct node* if_else_node) {
     free(end_label);
 }
 
-// Generate while loop: while condition: { body }
+// Generate while loop
 void generate_while_statement(struct node* while_node) {
     if (!while_node || !while_node->left || !while_node->right) return;
     
@@ -737,8 +744,8 @@ void generate_while_statement(struct node* while_node) {
     // while_node->right = loop body
     
     // Generate labels
-    char* loop_start_label = new_label();  // L1: loop begins here
-    char* loop_end_label = new_label();    // L2: exit loop here
+    char* loop_start_label = new_label();  
+    char* loop_end_label = new_label();   
     
     // Loop start label - this is where we come back to
     printf("%s:\n", loop_start_label);
@@ -758,7 +765,6 @@ void generate_while_statement(struct node* while_node) {
     // Loop end label
     printf("%s:\n", loop_end_label);
     
-    // Clean up
     if (condition_result != while_node->left->token) {
         free(condition_result);
     }
@@ -789,7 +795,6 @@ void generate_if_elif(struct node* if_elif_node) {
     // Final end label
     printf("%s:\n", end_label);
     
-    // Clean up
     if (condition_result != if_elif_node->left->token) {
         free(condition_result);
     }
@@ -810,13 +815,13 @@ void process_if_body_and_elif_chain(struct node* sequence, char* elif_start_labe
         printf("    goto %s\n", end_label);  // Skip all elifs after if body
     }
     
-    // Now process the elif chain
+    // Process the elif chain
     if (sequence->right) {
         process_elif_chain(sequence->right, elif_start_label, end_label);
     }
 }
 
-// Process the elif chain recursively
+// Process the elif chain
 void process_elif_chain(struct node* elif_sequence, char* current_label, char* end_label) {
     if (!elif_sequence) return;
     
@@ -867,7 +872,6 @@ void generate_single_elif(struct node* elif_node, char* end_label) {
     // Jump to end after body
     printf("    goto %s\n", end_label);
     
-    // Clean up
     if (condition_result != elif_node->left->token) {
         free(condition_result);
     }
@@ -889,7 +893,6 @@ void generate_single_elif_with_next(struct node* elif_node, char* next_label, ch
     // Jump to end after body
     printf("    goto %s\n", end_label);
     
-    // Clean up
     if (condition_result != elif_node->left->token) {
         free(condition_result);
     }
@@ -899,9 +902,8 @@ void generate_single_elif_with_next(struct node* elif_node, char* next_label, ch
 void generate_if_elif_else(struct node* if_elif_else_node) {
     if (!if_elif_else_node || !if_elif_else_node->left || !if_elif_else_node->right) return;
     
-    // Based on your actual AST structure:
     // if_elif_else_node->left = if-elif structure
-    // if_elif_else_node->right = final else body (direct assignment, no "else" wrapper)
+    // if_elif_else_node->right = final else body 
     
     // Generate end label for entire chain
     char* end_label = new_label();
@@ -918,12 +920,11 @@ void generate_if_elif_else(struct node* if_elif_else_node) {
     // Final end label
     printf("%s:\n", end_label);
     
-    // Clean up
     free(else_label);
     free(end_label);
 }
 
-// Process if-elif but make last elif jump to else instead of end
+// Generate if-elif with final else that jumps to end
 void generate_if_elif_with_final_else(struct node* if_elif_node, char* else_label, char* end_label) {
     if (!if_elif_node || !if_elif_node->left || !if_elif_node->right) return;
     
@@ -939,7 +940,6 @@ void generate_if_elif_with_final_else(struct node* if_elif_node, char* else_labe
     // Process the if body and elif chain
     process_if_body_and_elif_with_final_else(if_elif_node->right, first_elif_label, else_label, end_label);
     
-    // Clean up
     if (condition_result != if_elif_node->left->token) {
         free(condition_result);
     }
@@ -956,7 +956,7 @@ void process_if_body_and_elif_with_final_else(struct node* sequence, char* elif_
         printf("    goto %s\n", end_label);  // Skip all elifs and else
     }
     
-    // Now process the elif chain
+    // Process the elif chain
     if (sequence->right) {
         process_elif_chain_with_else_destination(sequence->right, elif_start_label, else_label, end_label);
     }
@@ -1015,7 +1015,6 @@ void generate_single_elif_with_else_fallback(struct node* elif_node, char* else_
     // Jump to end after body (skip else)
     printf("    goto %s\n", end_label);
     
-    // Clean up
     if (condition_result != elif_node->left->token) {
         free(condition_result);
     }
@@ -1061,7 +1060,7 @@ void generate_return_statement(struct node* return_node) {
         // Generate the return expression
         char* return_value = generate_expression(return_node->left);
         
-        // Emit return with value
+        // Print return with value
         printf("    return %s\n", return_value);
         
         // Clean up if we generated a temporary
@@ -1113,11 +1112,11 @@ void generate_function_arguments(struct node* call_node, int* arg_count, int* to
     *arg_count = 0;
     *total_bytes = 0;
     
-    // Process arguments starting from the right child (arguments)
+    // Process arguments starting from the right child
     process_call_arguments(call_node->right, arg_count, total_bytes, 0);
 }
 
-// Recursively process function call arguments
+// Process function call arguments
 void process_call_arguments(struct node* args_node, int* arg_count, int* total_bytes, int unused) {
     if (!args_node) return;
     
@@ -1177,7 +1176,7 @@ int is_argument_node(struct node* node) {
     return 1;
 }
 
-// Helper function to check if variable list has init_var nodes:
+// Function to check if variable list has init_var nodes:
 int has_init_var_nodes(struct node* var_list) {
     if (!var_list) return 0;
     
@@ -1203,16 +1202,6 @@ void generate_push_param(struct node* arg_node, int* total_bytes) {
             }
         }
         return;
-    }
-    
-    // Block bare function names (shouldn't happen with correct parsing)
-    if (arg_node->token) {
-        if (strcmp(arg_node->token, "multiply") == 0 ||
-            strcmp(arg_node->token, "add") == 0 ||
-            strcmp(arg_node->token, "helper_function") == 0 ||
-            strcmp(arg_node->token, "factorial") == 0) {
-            return; // Skip bare function names
-        }
     }
     
     // Handle normal arguments
@@ -1261,7 +1250,7 @@ char* generate_argument_value(struct node* arg_node) {
     return NULL;
 }
 
-// Generate 3AC for string indexing: text[index]
+// Generate 3AC for string indexing
 char* generate_string_index(struct node* index_node) {
     if (!index_node || !index_node->left || !index_node->right) return NULL;
     
@@ -1279,7 +1268,7 @@ char* generate_string_index(struct node* index_node) {
     return result_temp;
 }
 
-// Generate 3AC for string slicing: text[start:end]
+// Generate 3AC for string slicing
 char* generate_string_slice(struct node* slice_node) {
     if (!slice_node || !slice_node->left || !slice_node->right) return NULL;
     
@@ -1301,7 +1290,6 @@ char* generate_string_slice(struct node* slice_node) {
     char* result_temp = new_temp();
     printf("    %s = %s[%s:%s]\n", result_temp, string_var, start_expr, end_expr);
     
-    // Clean up temporaries if needed
     if (strcmp(start_expr, "0") != 0 && slice_node->right->left && 
         start_expr != slice_node->right->left->token) {
         free(start_expr);
@@ -1314,7 +1302,7 @@ char* generate_string_slice(struct node* slice_node) {
     return result_temp;
 }
 
-// Generate 3AC for string slicing with step: text[start:end:step]
+// Generate 3AC for string slicing with step
 char* generate_string_slice_step(struct node* slice_step_node) {
     if (!slice_step_node || !slice_step_node->left || !slice_step_node->right) return NULL;
     
@@ -1343,6 +1331,5 @@ char* generate_string_slice_step(struct node* slice_step_node) {
     char* result_temp = new_temp();
     printf("    %s = %s[%s:%s:%s]\n", result_temp, string_var, start_expr, end_expr, step_expr);
     
-    // Clean up temporaries (simplified cleanup)
     return result_temp;
 }

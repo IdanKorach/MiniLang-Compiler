@@ -1548,6 +1548,25 @@ void collect_parameter_names(node* node, int param_type, function_info* func_inf
         
         // Check if this is actually a parameter name (not a default value)
         if (is_valid_parameter_name(param_name)) {
+            
+            // ADD THIS CHECK - Skip boolean literals used as default values:
+            if (strcmp(param_name, "true") == 0 || strcmp(param_name, "false") == 0) {
+                // This is a boolean default value, not a parameter name - SKIP IT!
+                return;
+            }
+            
+            // ADD THIS CHECK - Skip numeric literals used as default values:
+            if (param_name[0] >= '0' && param_name[0] <= '9') {
+                // This is a numeric default value, not a parameter name - SKIP IT!
+                return;
+            }
+            
+            // ADD THIS CHECK - Skip string literals used as default values:
+            if (param_name[0] == '"' || param_name[0] == '\'') {
+                // This is a string default value, not a parameter name - SKIP IT!
+                return;
+            }
+            
             log_info_format("Found parameter: %s %s", get_type_name(param_type), param_name);
             
             // Add parameter to function
@@ -1575,11 +1594,23 @@ int is_valid_parameter_name(char* token) {
         strcmp(token, "return_type") == 0 ||
         strcmp(token, "") == 0) return 0;
     
-    // Skip numeric literals
-    if (token[0] >= '0' && token[0] <= '9') return 0;
+    // ADD THESE CHECKS - Skip default value literals:
     
-    // Skip string literals
-    if (token[0] == '"' || token[0] == '\'') return 0;
+    // Skip boolean literals (default values)
+    if (strcmp(token, "true") == 0 || strcmp(token, "false") == 0 || 
+        strcmp(token, "True") == 0 || strcmp(token, "False") == 0) {
+        return 0;  // This is a default value, not a parameter name
+    }
+    
+    // Skip numeric literals (default values)
+    if (token[0] >= '0' && token[0] <= '9') {
+        return 0;  // This is a numeric default value
+    }
+    
+    // Skip string literals (default values) 
+    if (token[0] == '"' || token[0] == '\'') {
+        return 0;  // This is a string default value
+    }
     
     // This looks like a valid parameter name
     return 1;
