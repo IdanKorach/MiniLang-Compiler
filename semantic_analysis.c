@@ -1155,9 +1155,9 @@ void process_variable_list(node* var_list, int type, scope* curr_scope) {
         
         char* var_name = var_list->left->token;
         
-        // Check for redeclaration
-        if (find_variable_in_scope(curr_scope, var_name)) {
-            log_error_format("Variable '%s' already declared in this scope", var_name);
+        // Check for redeclaration in scope hierarchy
+        if (find_variable_in_scope_hierarchy(curr_scope, var_name)) {
+            log_error_format("Variable '%s' already declared", var_name);
             return;
         }
         
@@ -1182,8 +1182,9 @@ void process_variable_list(node* var_list, int type, scope* curr_scope) {
     
     // Handle regular variable names (single variable)
     if (var_list->token && strlen(var_list->token) > 0) {
-        if (find_variable_in_scope(curr_scope, var_list->token)) {
-            log_error_format("Variable '%s' already declared in this scope", var_list->token);
+        // Check for redeclaration in scope hierarchy 
+        if (find_variable_in_scope_hierarchy(curr_scope, var_list->token)) {
+            log_error_format("Variable '%s' already declared", var_list->token);
             return;
         }
         add_variable(curr_scope, var_list->token, type);

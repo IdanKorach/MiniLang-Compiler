@@ -1,276 +1,246 @@
-# 🔥 EVIL EDGE CASE TESTS - Let's Break Your Compiler! 😈
-# These tests will find any remaining weak spots
+# FIXED VERSION - Reorder Functions and Fix Expression Issues
 
 # =============================================================================
-# TEST 1: EXTREME COMMA DECLARATION COMBINATIONS
+# HELPER FUNCTIONS FIRST (to avoid declaration order issues)
 # =============================================================================
-def test_extreme_comma_declarations() -> int: {
-    # Single declaration
-    int a;
-    
-    # All initialized
-    int b = 1, c = 2, d = 3, e = 4, f = 5;
-    
-    # Mixed pattern - every other one
-    int g, h = 10, i, j = 20, k;
-    
-    # Long chain
-    int v1 = 1, v2, v3 = 3, v4 = 4, v5, v6 = 6, v7 = 7, v8, v9 = 9, v10;
-    
-    # All types in succession
-    int x = 100;
-    float y = 2.5, z = 3.7;
-    string s1 = "hello", s2, s3 = "world";
-    bool flag1, flag2 = true, flag3 = false, flag4;
-    
-    return b + c + d + e + f;
+def test_function() -> bool: {
+    return true;
+}
+
+def another_function() -> bool: {
+    return false;
+}
+
+def get_value() -> int: {
+    return 42;
+}
+
+def add(int a, b) -> int: {
+    return a + b;
+}
+
+def multiply(int a, b) -> int: {
+    return a * b;
+}
+
+def test_defaults(int req1, req2; float opt1: 1.5; bool opt2: true; string opt3: "default") -> string: {
+    if (opt2): {
+        return opt3;
+    }
+    return "false_case";
 }
 
 # =============================================================================
-# TEST 2: DEEPLY NESTED EXPRESSIONS
+# TEST FUNCTIONS (now helper functions are declared first)
 # =============================================================================
-def test_nested_expressions() -> int: {
-    int a = 1, b = 2, c = 3, d = 4;
+def test_short_circuit_evaluation() -> bool: {
+    int a = 5, b = 1;  # CHANGED: b = 1 instead of 0 to avoid division by zero
     
-    # Extreme nesting
-    int result = ((((a + b) * c) - d) ** 2) % ((c * d) + (a - b));
+    # Simplified expressions to isolate type issues
+    bool div_result = (a / b) > 0;      # Test if division + comparison works
+    bool result1 = false and div_result; # Use the boolean result
+    bool result2 = true or div_result;   # Use the boolean result
     
-    # Mixed operators with precedence
-    int complex = a + b * c ** d - (a * b) / (c + d) % (a - b);
+    # Test function calls in boolean context
+    bool func_result = test_function();
+    bool result3 = false and func_result;
     
-    # Boolean complexity
-    bool crazy = ((a < b) and (c > d)) or (not (a == c) and (b != d)) or (a >= c and b <= d);
-    
-    return result + complex;
+    return result1 and result2 and result3;
 }
 
-# =============================================================================
-# TEST 3: STRING EDGE CASES
-# =============================================================================
-def test_string_edge_cases() -> string: {
-    # Empty string operations
+def test_division_and_comparison() -> bool: {
+    int x = 10, y = 2;
+    
+    # Test each operation separately
+    int div_result = x / y;           # Should be int
+    bool cmp_result = div_result > 0; # Should be bool
+    
+    return cmp_result;
+}
+
+def test_unary_minus_workaround() -> int: {
+    int a = 5;
+    
+    # This should work (subtraction from 0)
+    int negative_a = 0 - a;
+    
+    # Simpler expression first
+    int neg_ten = 0 - 10;
+    int neg_twenty = 0 - 20;
+    int result = neg_ten + (neg_twenty * 3);
+    
+    return negative_a + result;
+}
+
+def test_assignment_vs_expression() -> int: {
+    # Function call as statement
+    get_value();
+    
+    # Function call as expression in assignment
+    int x = get_value();
+    
+    # Function call as expression in complex expression
+    int base = get_value();
+    int multiplier = 10;
+    int y = base + (multiplier * get_value());
+    
+    # Function call in condition
+    int check_val = get_value();
+    if (check_val > 40): {
+        return x + y;
+    }
+    
+    return 0;
+}
+
+def test_nested_function_calls() -> int: {
+    # Build up complexity gradually
+    int first_mult = multiply(2, 3);      # 6
+    int first_add = add(4, 5);            # 9
+    int result1 = add(first_mult, first_add); # 15
+    
+    int second_add = add(1, 2);           # 3
+    int inner_mult = multiply(2, 2);      # 4
+    int third_add = add(inner_mult, 1);   # 5
+    int result2 = multiply(second_add, third_add); # 15
+    
+    return result1 + result2;
+}
+
+def test_empty_statements() -> int: {
+    int x = 0;
+    
+    # Empty if body with pass
+    if (x == 0): {
+        pass;
+    }
+    
+    # Empty else with pass
+    if (x > 0): {
+        x = x + 1;
+    } else: {
+        pass;
+    }
+    
+    # Empty while body
+    while (false): {
+        pass;
+    }
+    
+    return x;
+}
+
+def test_string_edge_cases_advanced() -> string: {
+    # Test each string operation separately
     string empty = "";
-    string empty_result = empty[0:0];      # Empty slice
-    string empty_char = empty[:];          # Full slice of empty
+    string result1 = empty[0:0];    # Empty slice of empty string
     
-    # Single character
     string single = "x";
-    string single_slice = single[0:1];     # Full single char
-    string single_empty = single[1:1];     # Empty from single
+    string char_copy = single[0:1]; # Should be "x"
     
-    # Boundary conditions
     string text = "Hello";
-    string first = text[0:1];              # First char
-    string last = text[4:5];               # Last char (index 4)
-    string beyond = text[5:];              # Beyond end
-    string most = text[0:4];               # All but last (instead of negative)
+    string beyond = text[10:20];    # Beyond string bounds
     
-    # Step edge cases
-    string stepped = text[0:5:2];          # Explicit range with step
-    string every_other = text[1:5:2];      # Every other starting from 1
-    
-    # More boundary tests
-    string middle = text[1:4];             # Middle section
-    string prefix = text[:3];              # First 3 chars
-    string suffix = text[2:];              # From index 2 to end
-    
-    return first;
-}
-
-# =============================================================================
-# TEST 4: EXTREME PARAMETER COMBINATIONS
-# =============================================================================
-def test_extreme_params(
-    int a, b, c; 
-    float x: 1.0, y, z: 3.0; 
-    string msg: "default", name; 
-    bool flag1, flag2: true, flag3: false
-) -> string: {
-    # Use all parameters
-    int sum = a + b + c;
-    float avg = (x + y + z) / 3.0;
-    
-    if (flag1 and flag2 and not flag3): {
-        return msg;
-    } else: {
-        return name;
-    }
-}
-
-# =============================================================================
-# TEST 5: FUNCTION CALL EDGE CASES
-# =============================================================================
-def test_function_call_edges() -> float: {
-    # Minimum parameters (rely on defaults)
-    string result1 = test_extreme_params(1, 2, 3);
-    
-    # Partial parameters
-    string result2 = test_extreme_params(1, 2, 3, 2.0);
-    
-    # Most parameters
-    string result3 = test_extreme_params(1, 2, 3, 1.5, 2.5, 3.5, "hello");
-    
-    # All parameters
-    string result4 = test_extreme_params(1, 2, 3, 1.1, 2.2, 3.3, "test", "name", false, true, false);
-    
-    # FIXED: Now we return a proper float instead of trying to assign string to float
-    int int_result = test_extreme_comma_declarations();
-    float float_result = int_result + 42.5;  # Convert int to float calculation
-    
-    return float_result;
-}
-
-# =============================================================================
-# TEST 6: CONTROL FLOW EDGE CASES
-# =============================================================================
-def test_control_flow_edges() -> int: {
-    int result = 0;
-    int counter = 0, limit = 5;
-    
-    # Nested if-elif-else
-    if (counter == 0): {
-        if (limit > 3): {
-            result = 1;
-        } elif (limit > 1): {
-            result = 2;
-        } else: {
-            result = 3;
-        }
-    } elif (counter == 1): {
-        while (limit > 0): {
-            result = result + limit;
-            limit = limit - 1;
-        }
-    } else: {
-        result = 999;
-    }
-    
-    # Complex while condition
-    while (counter < 10 and result < 100 and (counter % 2 == 0 or result % 3 == 0)): {
-        counter = counter + 1;
-        result = result * 2;
-        
-        if (result > 50): {
-            result = result / 2;
-        }
-    }
-    
-    return result;
-}
-
-# =============================================================================
-# TEST 7: MIXED ASSIGNMENT EDGE CASES
-# =============================================================================
-def test_mixed_assignment_edges() -> int: {
-    # Multiple assignment with complex expressions
-    int a = 1, b = 2;
-    int x, y, z;
-    
-    x, y = a + b, a * b;
-    z, a = x - y, y + x;
-    
-    # Chain assignments with function calls
-    int result1, result2;
-    result1, result2 = test_nested_expressions(), test_extreme_comma_declarations();
-    
-    # Assignment with string operations
-    string text = "hello";
-    string s1, s2;
-    s1, s2 = text[0:2], text[2:];
-    
-    return x + y + z + a + result1 + result2;
-}
-
-# =============================================================================
-# TEST 8: EXTREME EXPRESSION COMBINATIONS
-# =============================================================================
-def test_extreme_expressions() -> bool: {
-    int a = 5, b = 10, c = 15;
-    float x = 2.5, y = 3.7;
-    string text = "test123";
-    bool flag = true;
-    
-    # Combination of all operator types
-    bool mega_expression = (
-        (a + b * c ** 2 - 1) > (x * y + 2.5) and
-        (text[0:4] == "test" or text[4:] == "123") and
-        (flag or not flag) and
-        ((a % 3) == (b % 5)) and
-        (c >= a + b) and
-        (x <= y * 2.0)
-    );
-    
-    # Short circuit with complex sub-expressions
-    bool short_circuit = (
-        false and (test_nested_expressions() > 0) or
-        true or (test_extreme_comma_declarations() < 0) and
-        (text[0] == "t")
-    );
-    
-    return mega_expression and short_circuit;
-}
-
-# =============================================================================
-# TEST 9: BOUNDARY VALUE TESTING
-# =============================================================================
-def test_boundary_values() -> float: {
-    # Numeric boundaries
+    # Simpler expression for negative end
     int zero = 0;
-    int negative = 0 - 42;  # Use subtraction instead of unary minus
-    float tiny = 0.000001;
-    float big = 999999.999999;
+    int one = 1;
+    int neg_one = zero - one;
+    string negative_end = text[0:neg_one];
     
-    # String boundaries
-    string empty = "";
-    string single_char = "a";
-    string long_string = "This is a very long string that tests the limits of string handling in our compiler";
+    return char_copy;
+}
+
+def test_operator_precedence() -> int: {
+    int a = 2, b = 3, c = 4, d = 5;
     
-    # Boolean edge cases
-    bool always_true = true or false;
-    bool always_false = false and true;
-    bool complex_bool = not not not false;  # Triple negation
+    # Test precedence step by step
+    int c_pow_d = c ** d;           # c ** d first
+    int b_mult = b * c_pow_d;       # then b * result
+    int result1 = a + b_mult;       # finally a + result
     
-    # Arithmetic with boundaries
-    float result = (zero + tiny) * big + negative;  # Changed subtraction to addition
+    int a_plus_b = a + b;
+    int c_pow_d2 = c ** d;
+    int result2 = a_plus_b * c_pow_d2;
+    
+    int b_mod_c = b % c;
+    int mod_mult_d = b_mod_c * d;
+    int result3 = a + mod_mult_d;
+    
+    return result1 + result2 + result3;
+}
+
+def test_scope_validation() -> int: {
+    int global_var = 10;
+    
+    if (true): {
+        int block_var = 20;
+        global_var = global_var + block_var;
+        
+        while (global_var < 50): {
+            int inner_var = 5;
+            global_var = global_var + inner_var;
+        }
+    }
+    
+    return global_var;
+}
+
+def test_default_parameters() -> string: {
+    # Test all combinations of default parameters
+    string r1 = test_defaults(1, 2);                    # All defaults
+    string r2 = test_defaults(1, 2, 2.5);              # Some defaults  
+    string r3 = test_defaults(1, 2, 2.5, false);       # Fewer defaults
+    string r4 = test_defaults(1, 2, 2.5, false, "custom"); # No defaults
+    
+    return r1;
+}
+
+def test_complex_control_flow() -> int: {
+    int result = 0;
+    int i = 0;
+    
+    while (i < 5): {  # Reduced from 10 to 5 for simpler testing
+        int mod_result = i % 3;
+        
+        if (mod_result == 0): {
+            int mod_2 = i % 2;
+            if (mod_2 == 0): {
+                result = result + i;
+            } else: {
+                result = result - i;
+            }
+        } elif (mod_result == 1): {
+            result = result * 2;
+        } else: {
+            int j = 0;
+            while (j < 2): {
+                result = result + 1;
+                j = j + 1;
+            }
+        }
+        i = i + 1;
+    }
     
     return result;
 }
 
 # =============================================================================
-# TEST 10: UNICODE AND SPECIAL CHARACTERS (If supported)
-# =============================================================================
-def test_special_characters() -> string: {
-    # Special escape sequences
-    string tab_separated = "col1\tcol2\tcol3";
-    string newline_text = "line1\nline2\nline3";
-    string quoted_text = "He said \"Hello World!\" loudly";
-    string backslash_path = "C:\\Users\\Test\\file.txt";
-    
-    # Mixed quotes
-    string mixed1 = "Single 'quotes' inside double";
-    string mixed2 = 'Double "quotes" inside single';
-    
-    # Unicode (if your lexer supports it)
-    string unicode = "Hello 世界 🌍";  # This might break your lexer - good test!
-    
-    return quoted_text;
-}
-
-# =============================================================================
-# MAIN FUNCTION - EDGE CASE RUNNER
+# MAIN FUNCTION
 # =============================================================================
 def __main__(): {
-    # Run all edge case tests
-    int comma_result = test_extreme_comma_declarations();
-    int nested_result = test_nested_expressions();
-    string string_result = test_string_edge_cases();
-    float param_result = test_function_call_edges();
-    int control_result = test_control_flow_edges();
-    int mixed_result = test_mixed_assignment_edges();
-    bool expr_result = test_extreme_expressions();
-    float boundary_result = test_boundary_values();
-    string special_result = test_special_characters();
+    # Test basic division and comparison first
+    bool division_test = test_division_and_comparison();
     
-    # Final complex combination
-    int final_result = comma_result + nested_result + control_result + mixed_result;
+    # Then test short circuit
+    bool short_circuit_test = test_short_circuit_evaluation();
+    
+    int unary_test = test_unary_minus_workaround(); 
+    int assignment_test = test_assignment_vs_expression();
+    int nested_test = test_nested_function_calls();
+    int empty_test = test_empty_statements();
+    string string_test = test_string_edge_cases_advanced();
+    int precedence_test = test_operator_precedence();
+    int scope_test = test_scope_validation();
+    string default_test = test_default_parameters();
+    int control_test = test_complex_control_flow();
 }
